@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>GLB メッシュグループ化ツール（L/R自動連番・既存赤色表示）</title>
+  <title>GLB メッシュグループ化ツール（グループ再選択・スクロール対応）</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
@@ -87,7 +87,7 @@
 
     /* 左サイドバー */
     aside {
-      width: 320px;
+      width: 330px;
       background: #171a21;
       border-right: 1px solid #2c313c;
       display: flex;
@@ -111,6 +111,7 @@
       justify-content: space-between;
       align-items: center;
       border-bottom: 1px solid #282d37;
+      flex-shrink: 0;
     }
     .badge {
       background: #2563eb;
@@ -123,6 +124,7 @@
       flex: 1;
       overflow-y: auto;
       padding: 8px;
+      min-height: 0;
     }
     .list-item {
       display: flex;
@@ -134,11 +136,7 @@
       border: 1px solid #2f3542;
       border-radius: 5px;
       font-size: 13px;
-      cursor: pointer;
       transition: background 0.12s;
-    }
-    .list-item:hover {
-      background: #2b303d;
     }
     .list-item.selected {
       background: rgba(37, 99, 235, 0.22);
@@ -152,16 +150,30 @@
       flex: 1;
       margin-right: 8px;
     }
-    .remove-btn {
+    .remove-btn, .action-btn {
       background: transparent;
       border: none;
       color: #9ca3af;
       padding: 2px 6px;
       font-size: 12px;
+      cursor: pointer;
+      border-radius: 4px;
     }
     .remove-btn:hover {
       color: #f87171;
       background: rgba(248, 113, 113, 0.12);
+    }
+    .action-btn {
+      background: #2b303b;
+      border: 1px solid #3c4250;
+      color: #cbd5e1;
+      padding: 3px 8px;
+      font-size: 11px;
+    }
+    .action-btn:hover {
+      background: #3b82f6;
+      border-color: #3b82f6;
+      color: #fff;
     }
     .panel-footer {
       padding: 10px;
@@ -169,6 +181,7 @@
       display: flex;
       flex-direction: column;
       gap: 8px;
+      flex-shrink: 0;
     }
     .group-btn-row {
       display: flex;
@@ -252,7 +265,7 @@
 </head>
 <body>
   <header>
-    <h1>GLB メッシュグループ化ツール（L/R自動連番・既存赤色表示）</h1>
+    <h1>GLB メッシュグループ化ツール（グループ再選択・スクロール対応）</h1>
     <div class="toolbar">
       <label class="file-label">
         GLBファイルを選択
@@ -286,7 +299,7 @@
       </div>
 
       <!-- 作成されたグループ一覧 -->
-      <div class="panel-section" style="flex: 0.8;">
+      <div class="panel-section" style="flex: 1;">
         <div class="panel-header">
           <span>結合されたグループ</span>
           <span class="badge" style="background:#059669;" id="groupCount">0</span>
@@ -360,11 +373,11 @@
     let loadedFileName = 'model.glb';
     const selectableMeshes = [];
     const selectedMeshes = new Set();
-    const groupedMeshes = new Set(); // 既にグループ化されたメッシュのセット
+    const groupedMeshes = new Set();
 
-    const originalMaterials = new Map(); // mesh.uuid -> 元のマテリアル
-    const highlightOverlays = new Map(); // mesh.uuid -> { boxHelper, wireMesh }
-    const groupedOverlays = new Map(); // mesh.uuid -> 既存グループ用の赤色オーバーレイ情報
+    const originalMaterials = new Map();
+    const highlightOverlays = new Map();
+    const groupedOverlays = new Map();
     const createdGroups = [];
 
     // 連番カウンター
@@ -431,7 +444,6 @@
         highlightOverlays.delete(mesh.uuid);
       }
 
-      // もしグループ化済みでなければ元のマテリアルに戻す
       if (!groupedMeshes.has(mesh) && originalMaterials.has(mesh.uuid)) {
         if (Array.isArray(mesh.material)) {
           mesh.material.forEach(m => m.dispose());
@@ -478,7 +490,6 @@
       groupedOverlays.set(mesh.uuid, { wireMesh });
     }
 
-    // グループ化済み赤色表示の解除
     function removeGroupedRedHighlight(mesh) {
       const overlay = groupedOverlays.get(mesh.uuid);
       if (overlay) {
@@ -544,7 +555,7 @@
         });
       }
 
-      // グループ一覧更新
+      // グループ一覧更新（スクロール対応エリア）
       groupCountEl.textContent = createdGroups.length;
       if (createdGroups.length === 0) {
         groupListEl.innerHTML = `<div class="empty-msg">結合したグループがここに表示されます</div>`;
@@ -553,10 +564,18 @@
         createdGroups.forEach(group => {
           const item = document.createElement('div');
           item.className = 'list-item';
-          item.innerHTML = `
-            <span class="item-name">📦 ${group.name} (${group.children.length}個)</span>
-          `;
-          item.onclick = () => {
+
+          const nameSpan = document.createElement('span');
+          nameSpan.className = 'item-name';
+          nameSpan.textContent = `📦 ${group.name} (${group.children.length}個)`;
+          nameSpan.title = group.name;
+
+          const reselectBtn = document.createElement('button');
+          reselectBtn.className = 'action-btn';
+          reselectBtn.textContent = '再選択';
+          reselectBtn.title = 'このグループ内のメッシュを再度選択状態にします';
+          reselectBtn.onclick = (e) => {
+            e.stopPropagation();
             clearAllSelections();
             group.traverse(child => {
               if (child.isMesh) {
@@ -565,14 +584,17 @@
               }
             });
             updateUI();
-            showToast(`グループ「${group.name}」のメッシュを選択しました`);
+            showToast(`グループ「${group.name}」のメッシュを再選択しました`);
           };
+
+          item.appendChild(nameSpan);
+          item.appendChild(reselectBtn);
           groupListEl.appendChild(item);
         });
       }
     }
 
-    // 共通のグループ化処理（プレフィックス "L" または "R" を指定）
+    // 共通のグループ化処理
     function executeMerge(prefix) {
       if (selectedMeshes.size === 0 || !loadedRoot) return;
 
@@ -594,14 +616,12 @@
 
       const meshesToGroup = Array.from(selectedMeshes);
 
-      // 一旦青色ハイライトを完全に解除
       clearAllSelections();
 
       meshesToGroup.forEach(mesh => {
         mesh.updateWorldMatrix(true, false);
         newGroup.attach(mesh);
 
-        // 既存グループ済みメッシュとして登録し、赤色表示を適用
         groupedMeshes.add(mesh);
         applyGroupedRedHighlight(mesh);
       });
@@ -612,7 +632,6 @@
       showToast(`グループ「${groupName}」を作成し赤色でマークしました (${meshesToGroup.length}個)`);
     }
 
-    // ボタンイベント
     mergeLBtn.addEventListener('click', () => executeMerge('L'));
     mergeRBtn.addEventListener('click', () => executeMerge('R'));
     clearSelectionBtn.addEventListener('click', clearAllSelections);
@@ -683,7 +702,6 @@
       const previouslySelected = Array.from(selectedMeshes);
       clearAllSelections();
 
-      // エクスポート直前に赤色ハイライト・青色ハイライトを一時的に全て外してオリジナル素材に戻す
       groupedMeshes.forEach(mesh => removeGroupedRedHighlight(mesh));
 
       const exporter = new GLTFExporter();
@@ -697,7 +715,6 @@
           link.click();
           URL.revokeObjectURL(link.href);
 
-          // 表示状態（赤色・青色ハイライト）を復元
           groupedMeshes.forEach(mesh => applyGroupedRedHighlight(mesh));
           previouslySelected.forEach(m => {
             selectedMeshes.add(m);
