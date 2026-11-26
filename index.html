@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>GLB メッシュグループ化ツール（座標維持）</title>
+  <title>GLB メッシュグループ化ツール（L/R自動連番・既存赤色表示）</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
@@ -87,7 +87,7 @@
 
     /* 左サイドバー */
     aside {
-      width: 310px;
+      width: 320px;
       background: #171a21;
       border-right: 1px solid #2c313c;
       display: flex;
@@ -170,12 +170,16 @@
       flex-direction: column;
       gap: 8px;
     }
-    .group-input-row {
+    .group-btn-row {
       display: flex;
       gap: 6px;
     }
-    input[type="text"] {
+    .group-btn-row button {
       flex: 1;
+      justify-content: center;
+    }
+    input[type="text"] {
+      width: 100%;
       background: #121418;
       border: 1px solid #3c4250;
       color: #fff;
@@ -248,7 +252,7 @@
 </head>
 <body>
   <header>
-    <h1>GLB メッシュグループ化ツール（座標維持）</h1>
+    <h1>GLB メッシュグループ化ツール（L/R自動連番・既存赤色表示）</h1>
     <div class="toolbar">
       <label class="file-label">
         GLBファイルを選択
@@ -273,15 +277,16 @@
           </div>
         </div>
         <div class="panel-footer">
-          <div class="group-input-row">
-            <input type="text" id="groupNameInput" placeholder="グループ名 (例: Body_Group)" />
-            <button id="mergeBtn" class="primary" disabled>結合</button>
+          <input type="text" id="groupNameInput" placeholder="カスタム名 (空欄ならL/R自動連番)" />
+          <div class="group-btn-row">
+            <button id="mergeLBtn" class="primary" style="background:#2563eb;" disabled>[L] グループ化</button>
+            <button id="mergeRBtn" class="primary" style="background:#dc2626; border-color:#ef4444;" disabled>[R] グループ化</button>
           </div>
         </div>
       </div>
 
       <!-- 作成されたグループ一覧 -->
-      <div class="panel-section" style="flex: 0.75;">
+      <div class="panel-section" style="flex: 0.8;">
         <div class="panel-header">
           <span>結合されたグループ</span>
           <span class="badge" style="background:#059669;" id="groupCount">0</span>
@@ -294,7 +299,8 @@
 
     <div id="viewport">
       <div class="hud-hint">
-        <strong>操作方法:</strong> 左クリック: メッシュ選択/解除 ｜ ドラッグ: 回転 ｜ 右ドラッグ: 平行移動 ｜ ホイール: ズーム
+        <strong>操作方法:</strong> 左クリック: メッシュ選択/解除 ｜ ドラッグ: 回転 ｜ 右ドラッグ: 平行移動 ｜ ホイール: ズーム<br>
+        <span style="color:#ef4444; font-weight:600;">■ 赤色表示:</span> 既にグループ化されているメッシュ
       </div>
       <div class="toast" id="toast"></div>
     </div>
@@ -314,7 +320,8 @@
     const groupListEl = document.getElementById('groupList');
     const groupCountEl = document.getElementById('groupCount');
     const groupNameInput = document.getElementById('groupNameInput');
-    const mergeBtn = document.getElementById('mergeBtn');
+    const mergeLBtn = document.getElementById('mergeLBtn');
+    const mergeRBtn = document.getElementById('mergeRBtn');
     const clearSelectionBtn = document.getElementById('clearSelectionBtn');
     const exportBtn = document.getElementById('exportBtn');
     const toastEl = document.getElementById('toast');
@@ -353,10 +360,16 @@
     let loadedFileName = 'model.glb';
     const selectableMeshes = [];
     const selectedMeshes = new Set();
+    const groupedMeshes = new Set(); // 既にグループ化されたメッシュのセット
+
     const originalMaterials = new Map(); // mesh.uuid -> 元のマテリアル
     const highlightOverlays = new Map(); // mesh.uuid -> { boxHelper, wireMesh }
+    const groupedOverlays = new Map(); // mesh.uuid -> 既存グループ用の赤色オーバーレイ情報
     const createdGroups = [];
-    let groupCounter = 1;
+
+    // 連番カウンター
+    let lCounter = 1;
+    let rCounter = 1;
 
     // 通知トースト
     function showToast(msg) {
@@ -366,12 +379,14 @@
       showToast._timer = setTimeout(() => toastEl.classList.remove('show'), 2600);
     }
 
-    // ハイライト適用（発光マテリアル + ワイヤーフレーム + バウンディングボックス）
+    // 選択中のメッシュに対する青色ハイライト適用
     function applyHighlight(mesh) {
       if (highlightOverlays.has(mesh.uuid)) return;
 
-      // 元のマテリアルを退避し、発光カラーを付与したクローンに差し替え
-      originalMaterials.set(mesh.uuid, mesh.material);
+      if (!originalMaterials.has(mesh.uuid)) {
+        originalMaterials.set(mesh.uuid, mesh.material);
+      }
+
       const cloneMat = (mat) => {
         const m = mat.clone();
         if ('emissive' in m) {
@@ -386,39 +401,24 @@
         ? mesh.material.map(cloneMat)
         : cloneMat(mesh.material);
 
-      // ワイヤーフレームオーバーレイ（座標ずれ防止のためメッシュの子としてローカル原点に配置）
       const wireGeo = new THREE.WireframeGeometry(mesh.geometry);
       const wireMat = new THREE.LineBasicMaterial({
         color: 0x38bdf8,
         depthTest: true,
         transparent: true,
-        opacity: 0.75
+        opacity: 0.85
       });
       const wireMesh = new THREE.LineSegments(wireGeo, wireMat);
-      wireMesh.userData.isHelper = true;
       mesh.add(wireMesh);
 
-      // バウンディングボックスヘルパー
       const boxHelper = new THREE.BoxHelper(mesh, 0xfacc15);
-      boxHelper.userData.isHelper = true;
       scene.add(boxHelper);
 
       highlightOverlays.set(mesh.uuid, { boxHelper, wireMesh });
     }
 
-    // ハイライト解除
+    // 選択中のハイライト解除
     function removeHighlight(mesh) {
-      if (originalMaterials.has(mesh.uuid)) {
-        // クローンしたマテリアルを破棄して元に戻す
-        if (Array.isArray(mesh.material)) {
-          mesh.material.forEach(m => m.dispose());
-        } else {
-          mesh.material.dispose();
-        }
-        mesh.material = originalMaterials.get(mesh.uuid);
-        originalMaterials.delete(mesh.uuid);
-      }
-
       const overlay = highlightOverlays.get(mesh.uuid);
       if (overlay) {
         mesh.remove(overlay.wireMesh);
@@ -429,6 +429,63 @@
         overlay.boxHelper.dispose();
 
         highlightOverlays.delete(mesh.uuid);
+      }
+
+      // もしグループ化済みでなければ元のマテリアルに戻す
+      if (!groupedMeshes.has(mesh) && originalMaterials.has(mesh.uuid)) {
+        if (Array.isArray(mesh.material)) {
+          mesh.material.forEach(m => m.dispose());
+        } else {
+          mesh.material.dispose();
+        }
+        mesh.material = originalMaterials.get(mesh.uuid);
+        originalMaterials.delete(mesh.uuid);
+      }
+    }
+
+    // 既にグループ化されたメッシュの赤色表示適用
+    function applyGroupedRedHighlight(mesh) {
+      if (groupedOverlays.has(mesh.uuid)) return;
+
+      if (!originalMaterials.has(mesh.uuid)) {
+        originalMaterials.set(mesh.uuid, mesh.material);
+      }
+
+      const cloneMat = (mat) => {
+        const m = mat.clone();
+        if ('emissive' in m) {
+          m.emissive = new THREE.Color(0x991b1b);
+          m.emissiveIntensity = 0.45;
+        } else if ('color' in m) {
+          m.color.lerp(new THREE.Color(0xef4444), 0.4);
+        }
+        return m;
+      };
+      mesh.material = Array.isArray(mesh.material)
+        ? mesh.material.map(cloneMat)
+        : cloneMat(mesh.material);
+
+      const wireGeo = new THREE.WireframeGeometry(mesh.geometry);
+      const wireMat = new THREE.LineBasicMaterial({
+        color: 0xf87171,
+        depthTest: true,
+        transparent: true,
+        opacity: 0.65
+      });
+      const wireMesh = new THREE.LineSegments(wireGeo, wireMat);
+      mesh.add(wireMesh);
+
+      groupedOverlays.set(mesh.uuid, { wireMesh });
+    }
+
+    // グループ化済み赤色表示の解除
+    function removeGroupedRedHighlight(mesh) {
+      const overlay = groupedOverlays.get(mesh.uuid);
+      if (overlay) {
+        mesh.remove(overlay.wireMesh);
+        overlay.wireMesh.geometry.dispose();
+        overlay.wireMesh.material.dispose();
+        groupedOverlays.delete(mesh.uuid);
       }
     }
 
@@ -454,7 +511,9 @@
     // UIリスト更新
     function updateUI() {
       selectedCountEl.textContent = selectedMeshes.size;
-      mergeBtn.disabled = selectedMeshes.size < 1 || !loadedRoot;
+      const canMerge = selectedMeshes.size >= 1 && loadedRoot;
+      mergeLBtn.disabled = !canMerge;
+      mergeRBtn.disabled = !canMerge;
       clearSelectionBtn.disabled = selectedMeshes.size === 0;
 
       if (selectedMeshes.size === 0) {
@@ -497,7 +556,6 @@
           item.innerHTML = `
             <span class="item-name">📦 ${group.name} (${group.children.length}個)</span>
           `;
-          // クリックでグループ内の全メッシュを一括再選択
           item.onclick = () => {
             clearAllSelections();
             group.traverse(child => {
@@ -514,14 +572,21 @@
       }
     }
 
-    // 結合処理（座標・回転・スケールを一切変えない）
-    mergeBtn.addEventListener('click', () => {
+    // 共通のグループ化処理（プレフィックス "L" または "R" を指定）
+    function executeMerge(prefix) {
       if (selectedMeshes.size === 0 || !loadedRoot) return;
 
-      const groupName = groupNameInput.value.trim() || `MergedGroup_${groupCounter}`;
-      groupCounter++;
+      let groupName = groupNameInput.value.trim();
+      if (!groupName) {
+        if (prefix === 'L') {
+          groupName = `L${lCounter}`;
+          lCounter++;
+        } else {
+          groupName = `R${rCounter}`;
+          rCounter++;
+        }
+      }
 
-      // 新規グループをルート直下に作成（初期位置0,0,0・回転0・スケール1）
       const newGroup = new THREE.Group();
       newGroup.name = groupName;
       loadedRoot.add(newGroup);
@@ -529,22 +594,27 @@
 
       const meshesToGroup = Array.from(selectedMeshes);
 
-      // 一旦ハイライト解除（バウンディングボックス等のヘルパーが子に混入しないように）
+      // 一旦青色ハイライトを完全に解除
       clearAllSelections();
 
       meshesToGroup.forEach(mesh => {
-        // 最新のワールド行列を確定させたうえで attach() を使用
-        // attach() はワールド空間での位置・回転・スケールを完全に維持したまま親を付け替える
         mesh.updateWorldMatrix(true, false);
         newGroup.attach(mesh);
+
+        // 既存グループ済みメッシュとして登録し、赤色表示を適用
+        groupedMeshes.add(mesh);
+        applyGroupedRedHighlight(mesh);
       });
 
       createdGroups.push(newGroup);
       groupNameInput.value = '';
       updateUI();
-      showToast(`「${groupName}」に ${meshesToGroup.length} 個のメッシュを座標維持で結合しました`);
-    });
+      showToast(`グループ「${groupName}」を作成し赤色でマークしました (${meshesToGroup.length}個)`);
+    }
 
+    // ボタンイベント
+    mergeLBtn.addEventListener('click', () => executeMerge('L'));
+    mergeRBtn.addEventListener('click', () => executeMerge('R'));
     clearSelectionBtn.addEventListener('click', clearAllSelections);
 
     // GLBファイル読み込み
@@ -557,20 +627,23 @@
       const loader = new GLTFLoader();
 
       loader.load(url, (gltf) => {
-        // 既存モデルのクリーンアップ
         clearAllSelections();
         if (loadedRoot) {
           scene.remove(loadedRoot);
         }
         selectableMeshes.length = 0;
+        groupedMeshes.clear();
         createdGroups.length = 0;
-        groupCounter = 1;
+        originalMaterials.clear();
+        highlightOverlays.clear();
+        groupedOverlays.clear();
+        lCounter = 1;
+        rCounter = 1;
 
         loadedRoot = gltf.scene;
         scene.add(loadedRoot);
         loadedRoot.updateMatrixWorld(true);
 
-        // 選択可能なメッシュを収集
         loadedRoot.traverse((obj) => {
           if (obj.isMesh) {
             if (!obj.name) obj.name = `Mesh_${obj.id}`;
@@ -578,7 +651,6 @@
           }
         });
 
-        // カメラ位置をモデル全体が収まるように自動調整
         const box = new THREE.Box3().setFromObject(loadedRoot);
         if (!box.isEmpty()) {
           const center = box.getCenter(new THREE.Vector3());
@@ -608,9 +680,11 @@
     exportBtn.addEventListener('click', () => {
       if (!loadedRoot) return;
 
-      // エクスポート前にハイライト用マテリアル/ヘルパーを一時解除してクリーンな状態にする
       const previouslySelected = Array.from(selectedMeshes);
       clearAllSelections();
+
+      // エクスポート直前に赤色ハイライト・青色ハイライトを一時的に全て外してオリジナル素材に戻す
+      groupedMeshes.forEach(mesh => removeGroupedRedHighlight(mesh));
 
       const exporter = new GLTFExporter();
       exporter.parse(
@@ -623,7 +697,8 @@
           link.click();
           URL.revokeObjectURL(link.href);
 
-          // 選択状態を復元
+          // 表示状態（赤色・青色ハイライト）を復元
+          groupedMeshes.forEach(mesh => applyGroupedRedHighlight(mesh));
           previouslySelected.forEach(m => {
             selectedMeshes.add(m);
             applyHighlight(m);
@@ -639,7 +714,7 @@
       );
     });
 
-    // 3Dビューポート上でのクリック判定（ドラッグ操作と区別する）
+    // 3Dビューポート上でのクリック判定
     const raycaster = new THREE.Raycaster();
     const pointer = new THREE.Vector2();
     let pointerDownPos = { x: 0, y: 0 };
@@ -649,9 +724,9 @@
     });
 
     renderer.domElement.addEventListener('pointerup', (e) => {
-      if (e.button !== 0) return; // 左クリックのみ
+      if (e.button !== 0) return;
       const moveDist = Math.hypot(e.clientX - pointerDownPos.x, e.clientY - pointerDownPos.y);
-      if (moveDist > 5) return; // カメラ回転ドラッグなら無視
+      if (moveDist > 5) return;
 
       const rect = renderer.domElement.getBoundingClientRect();
       pointer.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
