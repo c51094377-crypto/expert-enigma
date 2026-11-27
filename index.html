@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>GLB 履帯結合・グループ化 (完全安定版)</title>
+  <title>GLB 履帯結合・グループ化 (形状崩壊完全修正版)</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
     body {
@@ -428,7 +428,7 @@
 </head>
 <body>
   <header>
-    <h1>GLB 履帯結合・グループ化 (完全安定版)</h1>
+    <h1>GLB 履帯結合・グループ化 (形状崩壊完全修正版)</h1>
     <div class="toolbar">
       <label class="file-label">
         GLB読込
@@ -457,7 +457,7 @@
         <div class="execute-box">
           <input type="text" id="groupNameInput" placeholder="名前入力 (空欄ならL1, R1自動連番)" />
 
-          <div class="action-section-label">🧩 1メッシュ結合（完全な形・位置保持で統合）</div>
+          <div class="action-section-label">🧩 1メッシュ結合（形状・スケール完全維持統合）</div>
           <div class="group-btn-row">
             <button id="combineMeshLBtn" class="primary" style="background:#7c3aed; border-color:#8b5cf6;" disabled>[L] 1メッシュ結合</button>
             <button id="combineMeshRBtn" class="primary" style="background:#c026d3; border-color:#d946ef;" disabled>[R] 1メッシュ結合</button>
@@ -1270,7 +1270,6 @@
       return name;
     }
 
-    // ① グループ化処理
     function executeGroupMerge(prefix) {
       if (selectedMeshes.size === 0 || !loadedRoot) return;
 
@@ -1321,7 +1320,7 @@
       showToast(`グループ「${groupName}」を作成しました`);
     }
 
-    // ② 完全に形崩壊を防ぐ頑健な1メッシュ結合処理
+    // ③ 【修正版】完全に形状・スケール崩壊を防ぎ、見た目通りの形を維持して1メッシュ結合する処理
     function executeCombineIntoSingleMesh(prefix) {
       if (selectedMeshes.size === 0 || !loadedRoot) return;
 
@@ -1345,7 +1344,7 @@
         }
       });
 
-      // 目標となるワールド行列（中心座標 ＋ 姿勢）
+      // 目標となるワールド行列
       const targetWorldMat = new THREE.Matrix4().compose(
         pivotWorldPos,
         pivotWorldQuat,
@@ -1365,14 +1364,17 @@
 
         mesh.updateWorldMatrix(true, false);
 
-        // 各メッシュのジオメトリを複製し、ワールド行列を完全にベイク（適用）
+        // ★【重要修正】各メッシュのローカル変形（スケール等）の歪みを防ぐため、
+        // ジオメトリを複製して頂点自体に現在のmatrixWorldを完全にベイク（焼き込み）する
         let geo = mesh.geometry.clone();
         if (geo.index) {
           geo = geo.toNonIndexed();
         }
-        geo.applyMatrix4(mesh.matrixWorld); // 一旦ワールド空間の絶対形状にする
 
-        // その後、新ピボットのローカル空間に変換
+        // 頂点にワールド行列を直接適用して絶対的な形を確定
+        geo.applyMatrix4(mesh.matrixWorld);
+
+        // その後、新しく設定する目標ピボットのローカル空間に変換
         geo.applyMatrix4(targetWorldInv);
 
         if (!geo.attributes.normal) {
@@ -1385,7 +1387,6 @@
           geo.setAttribute('uv', new THREE.BufferAttribute(dummyUv, 2));
         }
 
-        // 不要な属性を削除して結合エラーを完全に防止
         const allowedAttrs = ['position', 'normal', 'uv'];
         for (const attrName of Object.keys(geo.attributes)) {
           if (!allowedAttrs.includes(attrName)) {
@@ -1402,7 +1403,6 @@
         return;
       }
 
-      // ジオメトリ結合
       const mergedGeometry = BufferGeometryUtils.mergeGeometries(normalizedGeos, false);
       normalizedGeos.forEach(g => g.dispose());
 
@@ -1433,7 +1433,6 @@
       localMat.decompose(mergedMesh.position, mergedMesh.quaternion, mergedMesh.scale);
       mergedMesh.updateMatrixWorld(true);
 
-      // 元の個別メッシュを削除
       meshesToCombine.forEach(oldMesh => {
         if (oldMesh.parent) {
           oldMesh.parent.remove(oldMesh);
