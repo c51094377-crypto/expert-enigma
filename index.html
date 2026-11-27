@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>GLB 履帯結合・グループ化 (表裏・形状完全修復版)</title>
+  <title>GLB 履帯結合・グループ化 (上書きアップデート対応版)</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
     body {
@@ -129,6 +129,15 @@
       border-radius: 10px;
       font-size: 11px;
     }
+    .badge.editing {
+      background: #d97706;
+      animation: pulse 1.5s infinite;
+    }
+    @keyframes pulse {
+      0% { opacity: 1; }
+      50% { opacity: 0.6; }
+      100% { opacity: 1; }
+    }
     .list-container {
       max-height: 140px;
       min-height: 65px;
@@ -172,6 +181,12 @@
       background: #2b303b;
       border: 1px solid #3c4250;
       color: #cbd5e1;
+    }
+    .action-btn.editing-target {
+      background: #d97706;
+      border-color: #f59e0b;
+      color: #fff;
+      font-weight: 600;
     }
 
     .controls-area {
@@ -428,7 +443,7 @@
 </head>
 <body>
   <header>
-    <h1>GLB 履帯結合・グループ化 (表裏・形状完全修復版)</h1>
+    <h1>GLB 履帯結合・グループ化 (上書きアップデート対応)</h1>
     <div class="toolbar">
       <label class="file-label">
         GLB読込
@@ -455,18 +470,18 @@
 
       <div class="controls-area">
         <div class="execute-box">
-          <input type="text" id="groupNameInput" placeholder="名前入力 (空欄ならL1, R1自動連番)" />
+          <input type="text" id="groupNameInput" placeholder="名前入力 (新規ならL1, 編集時は保持)" />
 
-          <div class="action-section-label">🧩 1メッシュ結合（表裏反転修復・形状完全維持）</div>
+          <div class="action-section-label" id="actionSectionTitle">🧩 1メッシュ結合（新規または上書き）</div>
           <div class="group-btn-row">
-            <button id="combineMeshLBtn" class="primary" style="background:#7c3aed; border-color:#8b5cf6;" disabled>[L] 1メッシュ結合</button>
-            <button id="combineMeshRBtn" class="primary" style="background:#c026d3; border-color:#d946ef;" disabled>[R] 1メッシュ結合</button>
+            <button id="combineMeshLBtn" class="primary" style="background:#7c3aed; border-color:#8b5cf6;" disabled>[L] 結合 / 上書き</button>
+            <button id="combineMeshRBtn" class="primary" style="background:#c026d3; border-color:#d946ef;" disabled>[R] 結合 / 上書き</button>
           </div>
 
-          <div class="action-section-label">📁 グループ化（個別メッシュを残して階層化）</div>
+          <div class="action-section-label">📁 グループ化（新規または上書き）</div>
           <div class="group-btn-row">
-            <button id="mergeLBtn" class="primary" style="background:#2563eb;" disabled>[L] グループ化</button>
-            <button id="mergeRBtn" class="primary" style="background:#dc2626; border-color:#ef4444;" disabled>[R] グループ化</button>
+            <button id="mergeLBtn" class="primary" style="background:#2563eb;" disabled>[L] グループ化 / 上書き</button>
+            <button id="mergeRBtn" class="primary" style="background:#dc2626; border-color:#ef4444;" disabled>[R] グループ化 / 上書き</button>
           </div>
         </div>
 
@@ -527,7 +542,7 @@
 
       <div class="panel-section" style="flex: 1; min-height: 100px;">
         <div class="panel-header">
-          <span>作成済みグループ ／ 結合メッシュ</span>
+          <span id="groupPanelTitle">作成済みグループ ／ 結合メッシュ</span>
           <span class="badge" style="background:#059669;" id="groupCount">0</span>
         </div>
         <div class="list-container" id="groupList" style="max-height: none; flex: 1;">
@@ -702,6 +717,9 @@
     const highlightOverlays = new Map();
     const groupedOverlays = new Map();
     const createdItems = [];
+
+    // 現在「再選択」して編集中のターゲット（nullなら新規作成）
+    let editingTarget = null;
 
     let lCounter = 1;
     let rCounter = 1;
@@ -886,18 +904,15 @@
       showToast('軸の傾きを水平（0°）にリセットしました');
     });
 
-    // マイナススケール（ミラー反転）を考慮したジオメトリ行列適用ヘルパー
     function applyMatrixSafelyToGeometry(geometry, matrix) {
       geometry.applyMatrix4(matrix);
 
-      // 行列式が負（マイナススケール反転を含む）の場合、面の表裏（頂点順序）が裏返るため修正する
       if (matrix.determinant() < 0) {
         const posAttr = geometry.attributes.position;
         const normAttr = geometry.attributes.normal;
         const uvAttr = geometry.attributes.uv;
 
         for (let i = 0; i < posAttr.count; i += 3) {
-          // 頂点 1 と 2 を入れ替えてワインディングオーダーを元に戻す
           const x1 = posAttr.getX(i + 1), y1 = posAttr.getY(i + 1), z1 = posAttr.getZ(i + 1);
           const x2 = posAttr.getX(i + 2), y2 = posAttr.getY(i + 2), z2 = posAttr.getZ(i + 2);
           posAttr.setXYZ(i + 1, x2, y2, z2);
@@ -921,7 +936,6 @@
         if (normAttr) normAttr.needsUpdate = true;
         if (uvAttr) uvAttr.needsUpdate = true;
       }
-
       geometry.computeVertexNormals();
     }
 
@@ -1162,6 +1176,16 @@
       testSelectedMeshBtn.disabled = !hasSel;
       clearSelectionBtn.disabled = selectedMeshes.size === 0;
 
+      // 編集モード中のUI表示切替
+      if (editingTarget) {
+        selectedCountEl.classList.add('editing');
+        groupNameInput.value = editingTarget.object.name;
+        groupNameInput.disabled = true; // 編集時は名前固定（上書きのため）
+      } else {
+        selectedCountEl.classList.remove('editing');
+        groupNameInput.disabled = false;
+      }
+
       if (selectedMeshes.size === 0) {
         selectedListEl.innerHTML = `<div class="empty-msg">3Dモデル上のメッシュをタップすると<br>ここに名前が追加されます</div>`;
       } else {
@@ -1226,6 +1250,10 @@
           const obj = entry.object;
           const item = document.createElement('div');
           item.className = 'list-item';
+          if (editingTarget && editingTarget.object === obj) {
+            item.style.borderColor = '#d97706';
+            item.style.background = 'rgba(217, 119, 6, 0.15)';
+          }
 
           const nameSpan = document.createElement('span');
           nameSpan.className = 'item-name';
@@ -1246,11 +1274,15 @@
           };
 
           const reselectBtn = document.createElement('button');
-          reselectBtn.className = 'action-btn';
-          reselectBtn.textContent = '再選択';
+          reselectBtn.className = 'action-btn' + (editingTarget && editingTarget.object === obj ? ' editing-target' : '');
+          reselectBtn.textContent = (editingTarget && editingTarget.object === obj) ? '編集中' : '再選択';
           reselectBtn.onclick = (e) => {
             e.stopPropagation();
             clearAllSelections();
+
+            // 編集ターゲットに設定
+            editingTarget = entry;
+
             if (entry.type === 'group') {
               obj.traverse(child => {
                 if (child.isMesh) {
@@ -1262,13 +1294,16 @@
               selectedMeshes.add(obj);
               applyHighlight(obj);
             }
+
             obj.updateWorldMatrix(true, false);
             const worldPos = new THREE.Vector3();
             const worldQuat = new THREE.Quaternion();
             obj.getWorldPosition(worldPos);
             obj.getWorldQuaternion(worldQuat);
             setPivotTransform(worldPos, worldQuat, true);
+
             updateUI();
+            showToast(`「${obj.name}」に追加パーツを選択して結合ボタンを押すと上書きされます`);
           };
 
           item.appendChild(nameSpan);
@@ -1313,12 +1348,11 @@
       return name;
     }
 
-    // ① グループ化処理
+    // ① グループ化 / 上書き追加処理
     function executeGroupMerge(prefix) {
       if (selectedMeshes.size === 0 || !loadedRoot) return;
 
       resetActiveTestRotation();
-      const groupName = getNextName(prefix);
 
       const pivotWorldPos = pivotAnchor.position.clone();
       const pivotWorldQuat = preserveOrientationChk.checked
@@ -1330,41 +1364,53 @@
 
       clearAllSelections();
 
-      const newGroup = new THREE.Group();
-      newGroup.name = groupName;
-      loadedRoot.add(newGroup);
-      loadedRoot.updateMatrixWorld(true);
+      let targetGroup = null;
+      let groupName = '';
 
-      const targetGroupWorldMat = new THREE.Matrix4().compose(
-        pivotWorldPos,
-        pivotWorldQuat,
-        new THREE.Vector3(1, 1, 1)
-      );
-      const rootInvMat = loadedRoot.matrixWorld.clone().invert();
-      const localGroupMat = new THREE.Matrix4().multiplyMatrices(rootInvMat, targetGroupWorldMat);
-      localGroupMat.decompose(newGroup.position, newGroup.quaternion, newGroup.scale);
-      newGroup.updateMatrixWorld(true);
+      if (editingTarget && editingTarget.type === 'group') {
+        // 既存グループへの上書き追加
+        targetGroup = editingTarget.object;
+        groupName = targetGroup.name;
+      } else {
+        // 新規グループ作成
+        groupName = getNextName(prefix);
+        targetGroup = new THREE.Group();
+        targetGroup.name = groupName;
+        loadedRoot.add(targetGroup);
+        loadedRoot.updateMatrixWorld(true);
+
+        const targetGroupWorldMat = new THREE.Matrix4().compose(
+          pivotWorldPos,
+          pivotWorldQuat,
+          new THREE.Vector3(1, 1, 1)
+        );
+        const rootInvMat = loadedRoot.matrixWorld.clone().invert();
+        const localGroupMat = new THREE.Matrix4().multiplyMatrices(rootInvMat, targetGroupWorldMat);
+        localGroupMat.decompose(targetGroup.position, targetGroup.quaternion, targetGroup.scale);
+        targetGroup.updateMatrixWorld(true);
+
+        createdItems.push({ type: 'group', object: targetGroup });
+      }
 
       meshesToGroup.forEach(mesh => {
         if (applyToMeshes) {
           setMeshTransformOriginAndOrientation(mesh, pivotWorldPos, pivotWorldQuat);
         }
-
         mesh.updateWorldMatrix(true, false);
-        newGroup.attach(mesh);
+        targetGroup.attach(mesh);
 
         groupedMeshes.add(mesh);
         applyGroupedRedHighlight(mesh);
       });
 
-      createdItems.push({ type: 'group', object: newGroup });
+      editingTarget = null;
       groupNameInput.value = '';
       updateUI();
-      logStatus(`グループ「${groupName}」を作成 (${meshesToGroup.length}個)`);
-      showToast(`グループ「${groupName}」を作成しました`);
+      logStatus(`グループ「${groupName}」を更新/作成完了 (${targetGroup.children.filter(c=>c.isMesh).length}個)`);
+      showToast(`グループ「${groupName}」を更新しました`);
     }
 
-    // ② 完全に表裏・形状・両面描画を維持する1メッシュ結合処理
+    // ② 1メッシュ結合 / 上書きアップデート処理
     function executeCombineIntoSingleMesh(prefix) {
       if (selectedMeshes.size === 0 || !loadedRoot) return;
 
@@ -1388,13 +1434,45 @@
         }
       });
 
-      const targetWorldMat = new THREE.Matrix4().compose(
-        pivotWorldPos,
-        pivotWorldQuat,
-        new THREE.Vector3(1, 1, 1)
-      );
-      const targetWorldInv = targetWorldMat.clone().invert();
+      let targetWorldMat;
+      let targetMeshName = '';
 
+      if (editingTarget && editingTarget.type === 'mergedMesh') {
+        // 既存の結合メッシュを上書き更新する場合
+        const existingMesh = editingTarget.object;
+        targetMeshName = existingMesh.name;
+
+        existingMesh.updateWorldMatrix(true, false);
+        targetWorldMat = existingMesh.matrixWorld.clone();
+
+        // 既存の結合メッシュのジオメトリも統合素材のベースに含める
+        if (existingMesh.geometry) {
+          let origGeo = existingMesh.geometry.clone();
+          if (origGeo.index) origGeo = origGeo.toNonIndexed();
+          origGeo.applyMatrix4(existingMesh.matrixWorld);
+          
+          const tempMesh = new THREE.Mesh(origGeo, existingMesh.material);
+          // 一時的にリストの先頭に含める
+          meshesToCombine.unshift(tempMesh);
+        }
+
+        // 古い結合メッシュをシーンから削除
+        if (existingMesh.parent) existingMesh.parent.remove(existingMesh);
+        const idx = selectableMeshes.indexOf(existingMesh);
+        if (idx !== -1) selectableMeshes.splice(idx, 1);
+        const itemIdx = createdItems.findIndex(item => item.object === existingMesh);
+        if (itemIdx !== -1) createdItems.splice(itemIdx, 1);
+        if (existingMesh.geometry) existingMesh.geometry.dispose();
+      } else {
+        targetMeshName = getNextName(prefix);
+        targetWorldMat = new THREE.Matrix4().compose(
+          pivotWorldPos,
+          pivotWorldQuat,
+          new THREE.Vector3(1, 1, 1)
+        );
+      }
+
+      const targetWorldInv = targetWorldMat.clone().invert();
       const normalizedGeos = [];
       let baseSourceMaterial = null;
 
@@ -1406,8 +1484,6 @@
         }
 
         mesh.updateWorldMatrix(true, false);
-
-        // 元のメッシュから新ピボットのローカル空間への正確な変換行列
         const toNewLocalMat = new THREE.Matrix4().multiplyMatrices(targetWorldInv, mesh.matrixWorld);
 
         let geo = mesh.geometry.clone();
@@ -1415,7 +1491,6 @@
           geo = geo.toNonIndexed();
         }
 
-        // マイナススケール反転を自動検出し、頂点順序(表裏)を修復しながら変換を適用
         applyMatrixSafelyToGeometry(geo, toNewLocalMat);
 
         const posCount = geo.attributes.position.count;
@@ -1424,7 +1499,6 @@
           geo.setAttribute('uv', new THREE.BufferAttribute(dummyUv, 2));
         }
 
-        // position, normal, uv 以外の不要属性とグループ情報を整理
         const allowedAttrs = ['position', 'normal', 'uv'];
         for (const attrName of Object.keys(geo.attributes)) {
           if (!allowedAttrs.includes(attrName)) {
@@ -1452,7 +1526,6 @@
       mergedGeometry.computeBoundingBox();
       mergedGeometry.computeBoundingSphere();
 
-      // 両面描画（DoubleSide）を設定して、どの面も透けずに確実に描画されるマテリアルを作成
       const cleanMaterial = new THREE.MeshStandardMaterial({
         name: `${prefix}_CombinedMat`,
         color: (baseSourceMaterial && baseSourceMaterial.color) ? baseSourceMaterial.color.clone() : new THREE.Color(0x888888),
@@ -1462,9 +1535,8 @@
         side: THREE.DoubleSide
       });
 
-      const mergedName = getNextName(prefix);
       const mergedMesh = new THREE.Mesh(mergedGeometry, cleanMaterial);
-      mergedMesh.name = mergedName;
+      mergedMesh.name = targetMeshName;
 
       loadedRoot.add(mergedMesh);
       loadedRoot.updateMatrixWorld(true);
@@ -1473,7 +1545,7 @@
       localMat.decompose(mergedMesh.position, mergedMesh.quaternion, mergedMesh.scale);
       mergedMesh.updateMatrixWorld(true);
 
-      // 元の個別メッシュを削除
+      // 元の個別メッシュ（一時メッシュ除く）を削除
       meshesToCombine.forEach(oldMesh => {
         if (oldMesh.parent) {
           oldMesh.parent.remove(oldMesh);
@@ -1482,25 +1554,35 @@
         if (idx !== -1) {
           selectableMeshes.splice(idx, 1);
         }
-        if (oldMesh.geometry) oldMesh.geometry.dispose();
+        if (oldMesh.geometry && oldMesh !== meshesToCombine[0] && editingTarget) {
+          // 既存メッシュ以外
+        } else if (oldMesh.geometry && !editingTarget) {
+          oldMesh.geometry.dispose();
+        }
       });
 
       selectableMeshes.push(mergedMesh);
       groupedMeshes.add(mergedMesh);
       applyGroupedRedHighlight(mergedMesh);
 
-      createdItems.push({ type: 'mergedMesh', object: mergedMesh });
+      const newEntry = { type: 'mergedMesh', object: mergedMesh };
+      createdItems.push(newEntry);
+      
+      editingTarget = null;
       groupNameInput.value = '';
       updateUI();
-      logStatus(`「${mergedName}」として ${meshesToCombine.length} 個を1メッシュに結合完了`);
-      showToast(`「${mergedName}」に結合しました`);
+      logStatus(`「${targetMeshName}」として1メッシュに上書き結合完了`);
+      showToast(`「${targetMeshName}」に上書き結合しました`);
     }
 
     mergeLBtn.addEventListener('click', () => executeGroupMerge('L'));
     mergeRBtn.addEventListener('click', () => executeGroupMerge('R'));
     combineMeshLBtn.addEventListener('click', () => executeCombineIntoSingleMesh('L'));
     combineMeshRBtn.addEventListener('click', () => executeCombineIntoSingleMesh('R'));
-    clearSelectionBtn.addEventListener('click', clearAllSelections);
+    clearSelectionBtn.addEventListener('click', () => {
+      editingTarget = null;
+      clearAllSelections();
+    });
 
     fileInput.addEventListener('change', (e) => {
       const file = e.target.files[0];
@@ -1522,6 +1604,7 @@
         originalMaterials.clear();
         highlightOverlays.clear();
         groupedOverlays.clear();
+        editingTarget = null;
         lCounter = 1;
         rCounter = 1;
         activeTestTarget = null;
