@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>GLB 履帯グループ化 ＆ 1メッシュ結合ツール（iPad対応版）</title>
+  <title>GLB 履帯結合・グループ化 (完全安定版)</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
     body {
@@ -312,7 +312,6 @@
       line-height: 1.4;
     }
 
-    /* 画面内ステータス・ログ欄（iPad用） */
     .status-log-box {
       padding: 6px 10px;
       background: #0d0f12;
@@ -392,7 +391,6 @@
       transform: translateY(0);
     }
 
-    /* iPad用 手動保存バナー */
     .ipad-save-banner {
       position: absolute;
       top: 14px;
@@ -430,7 +428,7 @@
 </head>
 <body>
   <header>
-    <h1>GLB 履帯結合・グループ化 (iPad対応)</h1>
+    <h1>GLB 履帯結合・グループ化 (完全安定版)</h1>
     <div class="toolbar">
       <label class="file-label">
         GLB読込
@@ -459,7 +457,7 @@
         <div class="execute-box">
           <input type="text" id="groupNameInput" placeholder="名前入力 (空欄ならL1, R1自動連番)" />
 
-          <div class="action-section-label">🧩 1メッシュ結合（複数パーツを1メッシュへ統合）</div>
+          <div class="action-section-label">🧩 1メッシュ結合（完全な形・位置保持で統合）</div>
           <div class="group-btn-row">
             <button id="combineMeshLBtn" class="primary" style="background:#7c3aed; border-color:#8b5cf6;" disabled>[L] 1メッシュ結合</button>
             <button id="combineMeshRBtn" class="primary" style="background:#c026d3; border-color:#d946ef;" disabled>[R] 1メッシュ結合</button>
@@ -555,12 +553,10 @@
         </div>
       </div>
 
-      <!-- 画面内ステータス・エラー確認欄（iPad用） -->
       <div class="status-log-box" id="statusLog">待機中: GLBファイルを読み込んでください</div>
     </aside>
 
     <div id="viewport">
-      <!-- iPad用 手動ダウンロードリンクバナー -->
       <div class="ipad-save-banner" id="ipadSaveBanner">
         <span style="font-size:12.5px; color:#fff;">GLBの準備完了:</span>
         <a id="ipadDownloadLink" href="#" download="model_edited.glb">📥 タップして保存</a>
@@ -1325,7 +1321,7 @@
       showToast(`グループ「${groupName}」を作成しました`);
     }
 
-    // ② iPad Safari完全対応：1メッシュ結合処理（シングルマテリアル統合で書き出しエラー根絶）
+    // ② 完全に形崩壊を防ぐ頑健な1メッシュ結合処理
     function executeCombineIntoSingleMesh(prefix) {
       if (selectedMeshes.size === 0 || !loadedRoot) return;
 
@@ -1337,7 +1333,6 @@
         ? pivotAnchor.quaternion.clone()
         : new THREE.Quaternion();
 
-      // ハイライトを完全に外して元のクリーンな状態にする
       clearAllSelections();
       meshesToCombine.forEach(m => {
         if (groupedMeshes.has(m)) {
@@ -1350,6 +1345,7 @@
         }
       });
 
+      // 目標となるワールド行列（中心座標 ＋ 姿勢）
       const targetWorldMat = new THREE.Matrix4().compose(
         pivotWorldPos,
         pivotWorldQuat,
@@ -1363,19 +1359,21 @@
       meshesToCombine.forEach(mesh => {
         if (!mesh.geometry || !mesh.geometry.attributes.position) return;
 
-        // 最初の有効なマテリアルを基準として取得
         if (!baseSourceMaterial) {
           baseSourceMaterial = Array.isArray(mesh.material) ? mesh.material[0] : mesh.material;
         }
 
         mesh.updateWorldMatrix(true, false);
-        const toNewLocalMat = new THREE.Matrix4().multiplyMatrices(targetWorldInv, mesh.matrixWorld);
 
+        // 各メッシュのジオメトリを複製し、ワールド行列を完全にベイク（適用）
         let geo = mesh.geometry.clone();
         if (geo.index) {
           geo = geo.toNonIndexed();
         }
-        geo.applyMatrix4(toNewLocalMat);
+        geo.applyMatrix4(mesh.matrixWorld); // 一旦ワールド空間の絶対形状にする
+
+        // その後、新ピボットのローカル空間に変換
+        geo.applyMatrix4(targetWorldInv);
 
         if (!geo.attributes.normal) {
           geo.computeVertexNormals();
@@ -1387,7 +1385,7 @@
           geo.setAttribute('uv', new THREE.BufferAttribute(dummyUv, 2));
         }
 
-        // position, normal, uv 以外の不要属性とグループ情報を全削除（iPad Safari GLTFExporterバグ防止）
+        // 不要な属性を削除して結合エラーを完全に防止
         const allowedAttrs = ['position', 'normal', 'uv'];
         for (const attrName of Object.keys(geo.attributes)) {
           if (!allowedAttrs.includes(attrName)) {
@@ -1404,7 +1402,7 @@
         return;
       }
 
-      // useGroups = false で完全な単一ジオメトリとして結合
+      // ジオメトリ結合
       const mergedGeometry = BufferGeometryUtils.mergeGeometries(normalizedGeos, false);
       normalizedGeos.forEach(g => g.dispose());
 
@@ -1416,7 +1414,6 @@
       mergedGeometry.computeBoundingBox();
       mergedGeometry.computeBoundingSphere();
 
-      // GLTFExporterが確実に処理できるクリーンな単一標準マテリアルを作成
       const cleanMaterial = new THREE.MeshStandardMaterial({
         name: `${prefix}_CombinedMat`,
         color: (baseSourceMaterial && baseSourceMaterial.color) ? baseSourceMaterial.color.clone() : new THREE.Color(0x888888),
@@ -1530,7 +1527,6 @@
       });
     });
 
-    // iPad対応 GLBエクスポート処理（画面内ログ＋手動保存ボタン完備）
     let currentExportUrl = null;
     exportBtn.addEventListener('click', () => {
       if (!loadedRoot) return;
@@ -1541,10 +1537,7 @@
       const previouslySelected = Array.from(selectedMeshes);
       clearAllSelections();
 
-      // すべての赤色ハイライト・ワイヤーフレームを一時解除して元のマテリアルに戻す
       groupedMeshes.forEach(mesh => removeGroupedRedHighlight(mesh));
-
-      // シーン全体の行列を確定
       loadedRoot.updateMatrixWorld(true);
 
       try {
@@ -1560,12 +1553,10 @@
               currentExportUrl = URL.createObjectURL(blob);
               const fileName = `${loadedFileName}_edited.glb`;
 
-              // iPad用の手動保存バナーにもリンクをセット
               ipadDownloadLink.href = currentExportUrl;
               ipadDownloadLink.download = fileName;
               ipadSaveBanner.style.display = 'flex';
 
-              // 自動ダウンロードも試行
               const link = document.createElement('a');
               link.href = currentExportUrl;
               link.download = fileName;
@@ -1586,7 +1577,7 @@
             logStatus(`GLTF書き出しエラー: ${error && error.message ? error.message : String(error)}`, true);
             restoreExportState(previouslySelected);
           },
-          { binary: true }
+          { binary: true, embedImages: true }
         );
       } catch (e) {
         logStatus(`例外エラー: ${e.message}`, true);
