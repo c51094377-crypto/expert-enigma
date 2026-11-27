@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>GLB 履帯グループ化ツール（位置・回転姿勢保持＋ピボット設定）</title>
+  <title>GLB 履帯グループ化ツール（直感ギズモ操作・コンパクト軸）</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
@@ -16,7 +16,7 @@
       overflow: hidden;
     }
     header {
-      height: 52px;
+      height: 50px;
       background: #1a1d24;
       border-bottom: 1px solid #2c313c;
       display: flex;
@@ -26,7 +26,7 @@
       gap: 12px;
     }
     header h1 {
-      font-size: 15px;
+      font-size: 14.5px;
       font-weight: 600;
       color: #fff;
     }
@@ -39,21 +39,21 @@
       background: #2b303b;
       color: #e4e7ec;
       border: 1px solid #3c4250;
-      padding: 6px 12px;
+      padding: 5px 11px;
       border-radius: 6px;
-      font-size: 13px;
+      font-size: 12.5px;
       cursor: pointer;
       transition: all 0.15s;
       display: inline-flex;
       align-items: center;
-      gap: 6px;
+      gap: 5px;
     }
     button:hover:not(:disabled), .file-label:hover {
       background: #383e4c;
       border-color: #525a6c;
     }
     button:disabled {
-      opacity: 0.45;
+      opacity: 0.4;
       cursor: not-allowed;
     }
     button.primary {
@@ -74,12 +74,17 @@
     button.success:hover:not(:disabled) {
       background: #047857;
     }
-    button.pivot-active {
+    button.mode-active {
       background: #d97706;
       border-color: #f59e0b;
       color: #fff;
       font-weight: 600;
-      box-shadow: 0 0 10px rgba(245, 158, 11, 0.45);
+    }
+    button.gizmo-active {
+      background: #0284c7;
+      border-color: #38bdf8;
+      color: #fff;
+      font-weight: 600;
     }
     input[type="file"] { display: none; }
 
@@ -91,7 +96,7 @@
 
     /* 左サイドバー */
     aside {
-      width: 380px;
+      width: 385px;
       background: #171a21;
       border-right: 1px solid #2c313c;
       display: flex;
@@ -106,7 +111,7 @@
       border-bottom: 1px solid #2c313c;
     }
     .panel-header {
-      padding: 9px 14px;
+      padding: 8px 14px;
       background: #1e222b;
       font-size: 12px;
       font-weight: 600;
@@ -188,7 +193,7 @@
       border-top: 1px solid #282d37;
     }
 
-    /* ピボット設定ボックス */
+    /* ピボット直感操作パネル */
     .pivot-box {
       background: #121418;
       border: 1px solid #2f3542;
@@ -202,8 +207,40 @@
       display: flex;
       justify-content: space-between;
       align-items: center;
+      font-size: 11.5px;
+      font-weight: 600;
+      color: #e2e8f0;
+    }
+    .gizmo-btn-group {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 4px;
+    }
+    .gizmo-btn-group button {
+      justify-content: center;
+      padding: 4px 4px;
       font-size: 11px;
-      color: #cbd5e1;
+    }
+    .quick-btn-group {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 4px;
+    }
+    .quick-btn-group button {
+      justify-content: center;
+      padding: 4px 4px;
+      font-size: 11px;
+    }
+    .size-slider-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 11px;
+      color: #9ca3af;
+    }
+    .size-slider-row input[type="range"] {
+      flex: 1;
+      height: 4px;
     }
     .pivot-coords {
       display: grid;
@@ -259,6 +296,9 @@
       padding: 3px 6px;
       border-radius: 4px;
       border: 1px solid #282d37;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
     }
 
     .group-btn-row {
@@ -286,7 +326,7 @@
       color: #6b7280;
       font-size: 12px;
       text-align: center;
-      padding: 18px 12px;
+      padding: 16px 12px;
       line-height: 1.5;
     }
 
@@ -366,7 +406,7 @@
 </head>
 <body>
   <header>
-    <h1>GLB 履帯グループ化ツール（位置・回転姿勢保持＋ピボット設定）</h1>
+    <h1>GLB 履帯グループ化ツール（直感3Dギズモ操作対応）</h1>
     <div class="toolbar">
       <label class="file-label">
         GLBファイルを選択
@@ -392,26 +432,48 @@
         </div>
 
         <div class="panel-footer">
-          <!-- ピボット（中心点・軸姿勢）設定エリア -->
+          <!-- 直感的な中心＆軸設定パネル -->
           <div class="pivot-box">
             <div class="pivot-header">
-              <span>🎯 中心 (ピボット) 座標＆軸姿勢</span>
-              <div style="display:flex; gap:4px;">
-                <button id="pickPivotBtn" style="padding:3px 7px; font-size:11px;" disabled>3D上で中心指定</button>
-                <button id="autoCenterBtn" style="padding:3px 7px; font-size:11px;" disabled>自動中心</button>
-              </div>
+              <span>🎯 中心・軸の直感操作</span>
+              <span style="font-size:10.5px; color:#94a3b8;">3D上で直接ドラッグ可</span>
             </div>
+
+            <!-- 3Dギズモモード切替 -->
+            <div class="gizmo-btn-group">
+              <button id="gizmoMoveBtn" class="gizmo-active" disabled title="3D矢印をドラッグして中心位置を移動">✥ 移動ギズモ</button>
+              <button id="gizmoRotateBtn" disabled title="3Dリングをドラッグして軸の傾きを回転">↻ 回転ギズモ</button>
+              <button id="gizmoHideBtn" disabled title="ギズモを一時的に隠してメッシュを選びやすくする">👁 ギズモ非表示</button>
+            </div>
+
+            <!-- ワンクリック配置ボタン -->
+            <div class="quick-btn-group">
+              <button id="pickPivotBtn" disabled title="クリックしたモデル表面へ中心を移動">📍 クリック配置</button>
+              <button id="autoCenterBtn" disabled title="選択中メッシュの真ん中へ中心を戻す">⊞ 選択中心へ</button>
+              <button id="resetRotAxisBtn" disabled title="軸の傾きを0°(水平)に戻す">⟲ 傾きリセット</button>
+            </div>
+
+            <!-- 軸サイズ調整スライダー -->
+            <div class="size-slider-row">
+              <span>軸サイズ</span>
+              <input type="range" id="axisScaleSlider" min="0.1" max="2.5" step="0.05" value="0.5" />
+              <span id="axisScaleVal" style="width:32px; text-align:right; font-family:monospace;">0.5x</span>
+            </div>
+
+            <!-- 数値微調整 -->
             <div class="pivot-coords">
-              <div class="coord-field"><span>X</span><input type="number" id="pivotX" step="0.005" value="0" /></div>
-              <div class="coord-field"><span>Y</span><input type="number" id="pivotY" step="0.005" value="0" /></div>
-              <div class="coord-field"><span>Z</span><input type="number" id="pivotZ" step="0.005" value="0" /></div>
+              <div class="coord-field"><span>X</span><input type="number" id="pivotX" step="0.002" value="0" /></div>
+              <div class="coord-field"><span>Y</span><input type="number" id="pivotY" step="0.002" value="0" /></div>
+              <div class="coord-field"><span>Z</span><input type="number" id="pivotZ" step="0.002" value="0" /></div>
             </div>
 
-            <div class="rot-info" id="pivotRotDisplay">基準軸の傾き: X:0.0° Y:0.0° Z:0.0°</div>
+            <div class="rot-info">
+              <span id="pivotRotDisplay">傾き: X:0.0° Y:0.0° Z:0.0°</span>
+            </div>
 
-            <label class="checkbox-row" title="ONにすると、配置されているメッシュの傾き（回転姿勢）をそのままグループとメッシュのローカル軸として保持します">
+            <label class="checkbox-row" title="ONにすると、設定した軸の傾きをそのままグループとメッシュのローカル軸として保持します">
               <input type="checkbox" id="preserveOrientationChk" checked />
-              <span>配置時の回転姿勢(傾き)をローカル軸として保持</span>
+              <span>この軸の傾き(回転姿勢)をローカル軸として保持</span>
             </label>
 
             <label class="checkbox-row" title="ONにすると、親グループだけでなく中に入る各メッシュ自体の原点（ジオメトリ中心）も指定位置へ移動します">
@@ -438,7 +500,7 @@
       </div>
 
       <!-- 作成されたグループ一覧 -->
-      <div class="panel-section" style="flex: 0.85;">
+      <div class="panel-section" style="flex: 0.8;">
         <div class="panel-header">
           <span>結合されたグループ</span>
           <span class="badge" style="background:#059669;" id="groupCount">0</span>
@@ -470,8 +532,8 @@
 
     <div id="viewport">
       <div class="hud-hint">
-        <strong>操作:</strong> 左クリック: メッシュ選択 ｜ ドラッグ: 回転 ｜ 右ドラッグ: 移動 ｜ ホイール: ズーム<br>
-        <span style="color:#10b981; font-weight:600;">● 緑球＋3色軸:</span> ピボット位置＆ローカル軸の向き ｜
+        <strong>操作:</strong> メッシュクリック: 選択 ｜ <strong>3D矢印/リングドラッグ: 中心・軸を直接調整</strong> ｜ 空白ドラッグ: カメラ回転<br>
+        <span style="color:#10b981; font-weight:600;">● 緑点＋細軸:</span> 中心＆ローカル軸 ｜
         <span style="color:#ef4444; font-weight:600;">■ 赤色:</span> グループ化済み
       </div>
       <div class="toast" id="toast"></div>
@@ -481,6 +543,7 @@
   <script type="module">
     import * as THREE from 'three';
     import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+    import { TransformControls } from 'three/addons/controls/TransformControls.js';
     import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
     import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
 
@@ -498,9 +561,16 @@
     const exportBtn = document.getElementById('exportBtn');
     const toastEl = document.getElementById('toast');
 
-    // ピボット関連DOM
+    // ピボット・ギズモ関連DOM
+    const gizmoMoveBtn = document.getElementById('gizmoMoveBtn');
+    const gizmoRotateBtn = document.getElementById('gizmoRotateBtn');
+    const gizmoHideBtn = document.getElementById('gizmoHideBtn');
     const pickPivotBtn = document.getElementById('pickPivotBtn');
     const autoCenterBtn = document.getElementById('autoCenterBtn');
+    const resetRotAxisBtn = document.getElementById('resetRotAxisBtn');
+    const axisScaleSlider = document.getElementById('axisScaleSlider');
+    const axisScaleVal = document.getElementById('axisScaleVal');
+
     const pivotXInput = document.getElementById('pivotX');
     const pivotYInput = document.getElementById('pivotY');
     const pivotZInput = document.getElementById('pivotZ');
@@ -520,7 +590,7 @@
 
     // Three.js 基本セットアップ
     const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(45, viewport.clientWidth / viewport.clientHeight, 0.005, 1000);
+    const camera = new THREE.PerspectiveCamera(45, viewport.clientWidth / viewport.clientHeight, 0.002, 1000);
     camera.position.set(3, 2.5, 4);
 
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
@@ -546,19 +616,43 @@
     const gridHelper = new THREE.GridHelper(10, 20, 0x3b4252, 0x242933);
     scene.add(gridHelper);
 
-    // ピボット視覚化マーカー（位置＋回転姿勢の両方を表示）
-    const pivotMarkerGroup = new THREE.Group();
-    const pivotSphere = new THREE.Mesh(
-      new THREE.SphereGeometry(0.025, 16, 16),
+    // コンパクトなピボットマーカー（メッシュ選択の邪魔にならない極小デザイン）
+    const pivotAnchor = new THREE.Group(); // TransformControls が操作するターゲットオブジェクト
+    const pivotDot = new THREE.Mesh(
+      new THREE.SphereGeometry(0.008, 12, 12),
       new THREE.MeshBasicMaterial({ color: 0x10b981, depthTest: false })
     );
-    const pivotAxes = new THREE.AxesHelper(0.18);
-    pivotAxes.material.depthTest = false;
-    pivotMarkerGroup.add(pivotSphere);
-    pivotMarkerGroup.add(pivotAxes);
-    pivotMarkerGroup.renderOrder = 999;
-    pivotMarkerGroup.visible = false;
-    scene.add(pivotMarkerGroup);
+    const pivotSmallAxes = new THREE.AxesHelper(0.06);
+    pivotSmallAxes.material.depthTest = false;
+    pivotAnchor.add(pivotDot);
+    pivotAnchor.add(pivotSmallAxes);
+    pivotAnchor.renderOrder = 999;
+    pivotAnchor.visible = false;
+    scene.add(pivotAnchor);
+
+    // 3D空間で直接ドラッグ操作できる TransformControls
+    const transformControls = new TransformControls(camera, renderer.domElement);
+    transformControls.setSpace('local');
+    transformControls.setSize(0.5); // 最初からコンパクトなサイズ
+    transformControls.visible = false;
+    transformControls.enabled = false;
+    scene.add(transformControls);
+
+    // TransformControls をドラッグしている間は OrbitControls（カメラ回転）を無効化
+    let isDraggingGizmo = false;
+    transformControls.addEventListener('dragging-changed', (event) => {
+      isDraggingGizmo = event.value;
+      controls.enabled = !event.value;
+    });
+
+    // ギズモをドラッグして動かしたとき、UI座標と回転表示をリアルタイム同期
+    transformControls.addEventListener('change', () => {
+      if (!pivotAnchor.visible) return;
+      hasCustomPivotPos = true;
+      currentPivotWorldPos.copy(pivotAnchor.position);
+      currentPivotWorldQuat.copy(pivotAnchor.quaternion);
+      syncUIFromPivotAnchor();
+    });
 
     // 状態管理
     let loadedRoot = null;
@@ -575,13 +669,16 @@
     let lCounter = 1;
     let rCounter = 1;
 
-    // ピボット状態（ワールド位置 ＋ ワールド回転姿勢）
+    // ピボット状態
     let isPickingPivot = false;
     let hasCustomPivotPos = false;
+    let gizmoMode = 'translate'; // 'translate' | 'rotate' | 'none'
+    let baseModelScale = 1.0;
+
     const currentPivotWorldPos = new THREE.Vector3();
     const currentPivotWorldQuat = new THREE.Quaternion();
 
-    // テスト回転対象（Group または Mesh）
+    // テスト回転対象
     let activeTestTarget = null;
     let activeTestInitialQuat = new THREE.Quaternion();
 
@@ -589,8 +686,42 @@
       toastEl.textContent = msg;
       toastEl.classList.add('show');
       clearTimeout(showToast._timer);
-      showToast._timer = setTimeout(() => toastEl.classList.remove('show'), 2800);
+      showToast._timer = setTimeout(() => toastEl.classList.remove('show'), 2500);
     }
+
+    // ギズモ表示モード切り替え
+    function setGizmoMode(mode) {
+      gizmoMode = mode;
+      gizmoMoveBtn.classList.toggle('gizmo-active', mode === 'translate');
+      gizmoRotateBtn.classList.toggle('gizmo-active', mode === 'rotate');
+      gizmoHideBtn.classList.toggle('gizmo-active', mode === 'none');
+
+      if (!pivotAnchor.visible || mode === 'none') {
+        transformControls.detach();
+        transformControls.visible = false;
+        transformControls.enabled = false;
+      } else {
+        transformControls.setMode(mode);
+        transformControls.attach(pivotAnchor);
+        transformControls.visible = true;
+        transformControls.enabled = true;
+      }
+    }
+
+    gizmoMoveBtn.addEventListener('click', () => setGizmoMode('translate'));
+    gizmoRotateBtn.addEventListener('click', () => setGizmoMode('rotate'));
+    gizmoHideBtn.addEventListener('click', () => setGizmoMode('none'));
+
+    // 軸サイズスライダー
+    function updateAxisVisualScale() {
+      const userMult = parseFloat(axisScaleSlider.value);
+      axisScaleVal.textContent = `${userMult.toFixed(1)}x`;
+      // モデル全体サイズに比例しつつ、コンパクトに保つ
+      const markerScale = Math.max(0.05, baseModelScale * userMult);
+      pivotAnchor.scale.setScalar(markerScale);
+      transformControls.setSize(Math.max(0.25, Math.min(1.2, userMult * 0.85)));
+    }
+    axisScaleSlider.addEventListener('input', updateAxisVisualScale);
 
     function resetActiveTestRotation() {
       if (activeTestTarget) {
@@ -618,7 +749,24 @@
       setPivotTransform(worldPos, worldQuat, true);
     }
 
-    // ピボットの位置・回転姿勢をUIと3Dマーカーに反映
+    // pivotAnchor の状態を数値入力欄・テキスト表示へ反映
+    function syncUIFromPivotAnchor() {
+      pivotXInput.value = Number(pivotAnchor.position.x.toFixed(4));
+      pivotYInput.value = Number(pivotAnchor.position.y.toFixed(4));
+      pivotZInput.value = Number(pivotAnchor.position.z.toFixed(4));
+
+      const effectiveQuat = preserveOrientationChk.checked
+        ? pivotAnchor.quaternion
+        : new THREE.Quaternion();
+
+      const euler = new THREE.Euler().setFromQuaternion(effectiveQuat, 'XYZ');
+      const dx = THREE.MathUtils.radToDeg(euler.x).toFixed(1);
+      const dy = THREE.MathUtils.radToDeg(euler.y).toFixed(1);
+      const dz = THREE.MathUtils.radToDeg(euler.z).toFixed(1);
+      pivotRotDisplay.textContent = `傾き: X:${dx}° Y:${dy}° Z:${dz}°`;
+    }
+
+    // ピボットの位置・回転姿勢を3DアンカーとUIへ反映
     function setPivotTransform(vec3Pos, quatRot = null, isManualPos = true) {
       currentPivotWorldPos.copy(vec3Pos);
       hasCustomPivotPos = isManualPos;
@@ -627,28 +775,20 @@
         currentPivotWorldQuat.copy(quatRot);
       }
 
-      // チェックボックスがOFFならワールド平行（単位クォータニオン）表示
       const effectiveQuat = preserveOrientationChk.checked
         ? currentPivotWorldQuat
         : new THREE.Quaternion();
 
-      pivotXInput.value = Number(vec3Pos.x.toFixed(4));
-      pivotYInput.value = Number(vec3Pos.y.toFixed(4));
-      pivotZInput.value = Number(vec3Pos.z.toFixed(4));
+      pivotAnchor.position.copy(vec3Pos);
+      pivotAnchor.quaternion.copy(effectiveQuat);
+      pivotAnchor.visible = true;
 
-      const euler = new THREE.Euler().setFromQuaternion(effectiveQuat, 'XYZ');
-      const dx = THREE.MathUtils.radToDeg(euler.x).toFixed(1);
-      const dy = THREE.MathUtils.radToDeg(euler.y).toFixed(1);
-      const dz = THREE.MathUtils.radToDeg(euler.z).toFixed(1);
-      pivotRotDisplay.textContent = `基準軸の傾き: X:${dx}° Y:${dy}° Z:${dz}°`;
-
-      pivotMarkerGroup.position.copy(vec3Pos);
-      pivotMarkerGroup.quaternion.copy(effectiveQuat);
-      pivotMarkerGroup.visible = true;
+      syncUIFromPivotAnchor();
+      setGizmoMode(gizmoMode);
     }
 
     preserveOrientationChk.addEventListener('change', () => {
-      if (pivotMarkerGroup.visible) {
+      if (pivotAnchor.visible) {
         setPivotTransform(currentPivotWorldPos, currentPivotWorldQuat, hasCustomPivotPos);
       }
     });
@@ -666,7 +806,10 @@
     // 選択メッシュから中心座標と基準回転姿勢を計算
     function computeAutoCenterAndOrientation() {
       if (selectedMeshes.size === 0) {
-        pivotMarkerGroup.visible = false;
+        pivotAnchor.visible = false;
+        transformControls.detach();
+        transformControls.visible = false;
+        transformControls.enabled = false;
         hasCustomPivotPos = false;
         currentPivotWorldQuat.identity();
         return;
@@ -680,7 +823,6 @@
         box.expandByObject(mesh);
       });
 
-      // 最初に選択されたメッシュのワールド回転姿勢を基準軸として取得
       const refQuat = new THREE.Quaternion();
       if (firstMesh) {
         firstMesh.getWorldQuaternion(refQuat);
@@ -694,53 +836,50 @@
 
     pickPivotBtn.addEventListener('click', () => {
       isPickingPivot = !isPickingPivot;
-      pickPivotBtn.classList.toggle('pivot-active', isPickingPivot);
+      pickPivotBtn.classList.toggle('mode-active', isPickingPivot);
       viewport.classList.toggle('picking-pivot', isPickingPivot);
       if (isPickingPivot) {
-        showToast('3Dモデル上の接合部（回転軸にしたい位置）をクリックしてください');
+        showToast('モデル上の接合部をクリックするとそこへ中心が移動します');
       }
     });
 
     autoCenterBtn.addEventListener('click', () => {
       isPickingPivot = false;
-      pickPivotBtn.classList.remove('pivot-active');
+      pickPivotBtn.classList.remove('mode-active');
       viewport.classList.remove('picking-pivot');
       computeAutoCenterAndOrientation();
-      showToast('選択メッシュの中心と基準回転姿勢にリセットしました');
+      showToast('選択メッシュの中心へ移動しました');
     });
 
-    // ★核心処理：見た目の位置・回転・スケールを一切変えずに、
-    // 指定された「ワールド座標(targetWorldPos)」と「ワールド回転姿勢(targetWorldQuat)」を
-    // メッシュ自身の原点・ローカル軸としてベイク（焼き込み）する関数
+    resetRotAxisBtn.addEventListener('click', () => {
+      currentPivotWorldQuat.identity();
+      setPivotTransform(currentPivotWorldPos, currentPivotWorldQuat, hasCustomPivotPos);
+      showToast('軸の傾きを水平（0°）にリセットしました');
+    });
+
+    // ★見た目の位置・回転・スケールを変えずに、メッシュ自身の原点とローカル軸を設定
     function setMeshTransformOriginAndOrientation(mesh, targetWorldPos, targetWorldQuat) {
       if (!mesh || !mesh.geometry) return;
 
       mesh.updateWorldMatrix(true, false);
-
-      // 1. 現在のメッシュのワールド変換行列（頂点をワールド空間へ写す行列）
       const oldWorldMatrix = mesh.matrixWorld.clone();
 
-      // 2. 目標とする新しいワールド変換行列（位置 = targetWorldPos, 回転 = targetWorldQuat, スケール = 1,1,1）
       const newWorldMatrix = new THREE.Matrix4().compose(
         targetWorldPos,
         targetWorldQuat,
         new THREE.Vector3(1, 1, 1)
       );
 
-      // 3. ジオメトリ頂点に掛ける補正行列 = (新しいワールド行列の逆行列) × (古いワールド行列)
-      // これにより、メッシュ本体を newWorldMatrix へ置いたとき、全頂点のワールド座標が完全に元のまま一致する！
       const geoTransformMatrix = new THREE.Matrix4()
         .copy(newWorldMatrix)
         .invert()
         .multiply(oldWorldMatrix);
 
-      // 4. ジオメトリを複製し、頂点座標・法線を新ローカル座標系に変換
       mesh.geometry = mesh.geometry.clone();
       mesh.geometry.applyMatrix4(geoTransformMatrix);
       mesh.geometry.computeBoundingBox();
       mesh.geometry.computeBoundingSphere();
 
-      // 5. メッシュ自身のローカル変換（親ノード基準の position / quaternion / scale）を更新
       if (mesh.parent) {
         mesh.parent.updateWorldMatrix(true, false);
         const parentWorldInv = mesh.parent.matrixWorld.clone().invert();
@@ -751,7 +890,6 @@
       }
       mesh.updateMatrixWorld(true);
 
-      // 6. ワイヤーフレーム・バウンディングボックスを再生成
       rebuildOverlaysForMesh(mesh);
     }
 
@@ -766,14 +904,14 @@
       if (wasSelected) applyHighlight(mesh);
     }
 
-    // 「メッシュ中心のみ適用（グループ化なし）」ボタン
+    // 「メッシュ中心のみ適用」ボタン
     applyMeshPivotOnlyBtn.addEventListener('click', () => {
       if (selectedMeshes.size === 0) return;
       resetActiveTestRotation();
 
-      const targetPos = currentPivotWorldPos.clone();
+      const targetPos = pivotAnchor.position.clone();
       const targetQuat = preserveOrientationChk.checked
-        ? currentPivotWorldQuat.clone()
+        ? pivotAnchor.quaternion.clone()
         : new THREE.Quaternion();
 
       const meshes = Array.from(selectedMeshes);
@@ -782,7 +920,7 @@
       });
 
       updateUI();
-      showToast(`${meshes.length} 個のメッシュに中心座標と回転姿勢を焼き込みました`);
+      showToast(`${meshes.length} 個のメッシュに中心座標と軸姿勢を適用しました`);
     });
 
     // 「単体軸テスト」ボタン
@@ -921,9 +1059,12 @@
       selectedMeshes.clear();
       hasCustomPivotPos = false;
       currentPivotWorldQuat.identity();
-      pivotMarkerGroup.visible = false;
+      pivotAnchor.visible = false;
+      transformControls.detach();
+      transformControls.visible = false;
+      transformControls.enabled = false;
       isPickingPivot = false;
-      pickPivotBtn.classList.remove('pivot-active');
+      pickPivotBtn.classList.remove('mode-active');
       viewport.classList.remove('picking-pivot');
       updateUI();
     }
@@ -934,8 +1075,12 @@
       const hasSel = selectedMeshes.size >= 1 && loadedRoot;
       mergeLBtn.disabled = !hasSel;
       mergeRBtn.disabled = !hasSel;
+      gizmoMoveBtn.disabled = !hasSel;
+      gizmoRotateBtn.disabled = !hasSel;
+      gizmoHideBtn.disabled = !hasSel;
       pickPivotBtn.disabled = !hasSel;
       autoCenterBtn.disabled = !hasSel;
+      resetRotAxisBtn.disabled = !hasSel;
       applyMeshPivotOnlyBtn.disabled = !hasSel;
       testSelectedMeshBtn.disabled = !hasSel;
       clearSelectionBtn.disabled = selectedMeshes.size === 0;
@@ -953,26 +1098,24 @@
           nameSpan.textContent = mesh.name || `(無名メッシュ_${mesh.id})`;
           nameSpan.title = nameSpan.textContent;
 
-          // このメッシュの「現在の回転姿勢（傾き）」を基準軸としてコピーするボタン
           const copyRotBtn = document.createElement('button');
           copyRotBtn.className = 'action-btn';
-          copyRotBtn.textContent = '姿勢取得';
-          copyRotBtn.title = 'このメッシュが現在持っている回転角度（傾き）をピボット軸の向きに設定します';
+          copyRotBtn.textContent = '姿勢コピー';
+          copyRotBtn.title = 'このメッシュの回転角度（傾き）を軸の向きにコピーします';
           copyRotBtn.onclick = (e) => {
             e.stopPropagation();
             mesh.updateWorldMatrix(true, false);
             const q = new THREE.Quaternion();
             mesh.getWorldQuaternion(q);
             preserveOrientationChk.checked = true;
-            setPivotTransform(currentPivotWorldPos, q, hasCustomPivotPos);
-            showToast(`「${mesh.name}」の回転姿勢を基準軸に設定しました`);
+            setPivotTransform(pivotAnchor.position, q, hasCustomPivotPos);
+            showToast(`「${mesh.name}」の傾きを軸にコピーしました`);
           };
 
-          // このメッシュの現在の原点位置＋回転姿勢にピボットマーカーを合わせるボタン
           const showOriginBtn = document.createElement('button');
           showOriginBtn.className = 'action-btn';
-          showOriginBtn.textContent = '原点確認';
-          showOriginBtn.title = 'このメッシュが現在持っている原点位置と回転姿勢を緑マーカーで表示します';
+          showOriginBtn.textContent = '原点へ';
+          showOriginBtn.title = 'このメッシュが現在持っている原点位置へギズモを移動します';
           showOriginBtn.onclick = (e) => {
             e.stopPropagation();
             mesh.updateWorldMatrix(true, false);
@@ -981,7 +1124,7 @@
             mesh.getWorldPosition(pos);
             mesh.getWorldQuaternion(q);
             setPivotTransform(pos, q, true);
-            showToast(`「${mesh.name}」の現在の原点と姿勢を表示しました`);
+            showToast(`「${mesh.name}」の原点へ移動しました`);
           };
 
           const removeBtn = document.createElement('button');
@@ -1079,7 +1222,7 @@
     testAxisSelect.addEventListener('change', applyTestRotation);
     resetTestRotBtn.addEventListener('click', resetActiveTestRotation);
 
-    // ★グループ化処理（位置 ＋ 回転姿勢の両方を保持したままグループ化）
+    // グループ化処理
     function executeMerge(prefix) {
       if (selectedMeshes.size === 0 || !loadedRoot) return;
 
@@ -1096,9 +1239,9 @@
         }
       }
 
-      const pivotWorldPos = currentPivotWorldPos.clone();
+      const pivotWorldPos = pivotAnchor.position.clone();
       const pivotWorldQuat = preserveOrientationChk.checked
-        ? currentPivotWorldQuat.clone()
+        ? pivotAnchor.quaternion.clone()
         : new THREE.Quaternion();
 
       const applyToMeshes = applyToMeshOriginChk.checked;
@@ -1106,13 +1249,11 @@
 
       clearAllSelections();
 
-      // 1. 新しいグループを作成し、親(loadedRoot)に追加
       const newGroup = new THREE.Group();
       newGroup.name = groupName;
       loadedRoot.add(newGroup);
       loadedRoot.updateMatrixWorld(true);
 
-      // 2. グループのワールド変換（指定ピボット座標 ＋ 指定回転姿勢）を loadedRoot のローカル座標系へ変換して設定
       const targetGroupWorldMat = new THREE.Matrix4().compose(
         pivotWorldPos,
         pivotWorldQuat,
@@ -1123,14 +1264,11 @@
       localGroupMat.decompose(newGroup.position, newGroup.quaternion, newGroup.scale);
       newGroup.updateMatrixWorld(true);
 
-      // 3. 各メッシュを処理（見た目上のワールド位置・傾きは1ミリも動かさない）
       meshesToGroup.forEach(mesh => {
         if (applyToMeshes) {
-          // メッシュ自身の原点とローカル軸も、グループのピボット位置・回転姿勢と完全に一致させる
           setMeshTransformOriginAndOrientation(mesh, pivotWorldPos, pivotWorldQuat);
         }
 
-        // attach() により、見た目上のワールド行列を完全に維持したまま newGroup の子に接続
         mesh.updateWorldMatrix(true, false);
         newGroup.attach(mesh);
 
@@ -1141,7 +1279,7 @@
       createdGroups.push(newGroup);
       groupNameInput.value = '';
       updateUI();
-      showToast(`「${groupName}」を作成（配置位置・回転姿勢を保持してグループ化）`);
+      showToast(`「${groupName}」を作成（配置位置・回転姿勢を保持）`);
     }
 
     mergeLBtn.addEventListener('click', () => executeMerge('L'));
@@ -1191,8 +1329,9 @@
           const maxDim = Math.max(size.x, size.y, size.z);
           const dist = maxDim * 1.8 || 3;
 
-          const markerScale = Math.max(0.05, maxDim * 0.4);
-          pivotMarkerGroup.scale.setScalar(markerScale);
+          // モデル全体のサイズに応じてコンパクトな基準スケールを計算
+          baseModelScale = Math.max(0.05, maxDim * 0.35);
+          updateAxisVisualScale();
 
           controls.target.copy(center);
           camera.position.set(center.x + dist * 0.7, center.y + dist * 0.6, center.z + dist * 0.9);
@@ -1250,7 +1389,7 @@
       );
     });
 
-    // 3Dビューポート上のクリック判定
+    // 3Dビューポート上のクリック判定（ギズモドラッグ中はメッシュ選択を発火させない）
     const raycaster = new THREE.Raycaster();
     const pointer = new THREE.Vector2();
     let pointerDownPos = { x: 0, y: 0 };
@@ -1261,6 +1400,8 @@
 
     renderer.domElement.addEventListener('pointerup', (e) => {
       if (e.button !== 0) return;
+      if (isDraggingGizmo || transformControls.axis !== null) return;
+
       const moveDist = Math.hypot(e.clientX - pointerDownPos.x, e.clientY - pointerDownPos.y);
       if (moveDist > 5) return;
 
@@ -1274,11 +1415,11 @@
       if (intersects.length > 0) {
         if (isPickingPivot) {
           const hitPoint = intersects[0].point;
-          setPivotTransform(hitPoint, currentPivotWorldQuat, true);
+          setPivotTransform(hitPoint, pivotAnchor.quaternion, true);
           isPickingPivot = false;
-          pickPivotBtn.classList.remove('pivot-active');
+          pickPivotBtn.classList.remove('mode-active');
           viewport.classList.remove('picking-pivot');
-          showToast('クリックした位置を中心（ピボット）に設定しました');
+          showToast('クリックした位置へ中心を移動しました');
         } else {
           const hitMesh = intersects[0].object;
           toggleMeshSelection(hitMesh);
