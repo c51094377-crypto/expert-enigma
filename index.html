@@ -22,25 +22,46 @@
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 0 16px;
-      gap: 12px;
+      padding: 0 14px;
+      gap: 10px;
       flex-shrink: 0;
     }
     header h1 {
-      font-size: 14px;
+      font-size: 13.5px;
       font-weight: 600;
       color: #fff;
+      white-space: nowrap;
+    }
+    .autosave-badge {
+      font-size: 11px;
+      padding: 3px 8px;
+      border-radius: 12px;
+      background: #1e293b;
+      border: 1px solid #334155;
+      color: #94a3b8;
+      white-space: nowrap;
+    }
+    .autosave-badge.saved {
+      background: rgba(16, 185, 129, 0.15);
+      border-color: #10b981;
+      color: #34d399;
+    }
+    .autosave-badge.saving {
+      background: rgba(245, 158, 11, 0.15);
+      border-color: #f59e0b;
+      color: #fbbf24;
     }
     .toolbar {
       display: flex;
       align-items: center;
-      gap: 8px;
+      gap: 6px;
+      flex-wrap: wrap;
     }
     button, .file-label {
       background: #2b303b;
       color: #e4e7ec;
       border: 1px solid #3c4250;
-      padding: 5px 10px;
+      padding: 5px 9px;
       border-radius: 5px;
       font-size: 12px;
       cursor: pointer;
@@ -48,6 +69,7 @@
       display: inline-flex;
       align-items: center;
       gap: 4px;
+      white-space: nowrap;
     }
     button:hover:not(:disabled), .file-label:hover {
       background: #383e4c;
@@ -75,13 +97,13 @@
     button.success:hover:not(:disabled) {
       background: #047857;
     }
-    button.warning-btn {
+    button.warning-btn, .warning-btn {
       background: #d97706;
       border-color: #f59e0b;
       color: #fff;
       font-weight: 600;
     }
-    button.warning-btn:hover:not(:disabled) {
+    button.warning-btn:hover:not(:disabled), .warning-btn:hover {
       background: #b45309;
     }
     button.gizmo-active {
@@ -409,18 +431,23 @@
 </head>
 <body>
   <header>
-    <h1>GLB 履帯グループ化 ＆ 1メッシュ結合ツール</h1>
+    <div style="display:flex; align-items:center; gap:8px;">
+      <h1>GLB 履帯グループ化 ＆ 1メッシュ結合</h1>
+      <span id="autosaveStatus" class="autosave-badge">未保存</span>
+    </div>
     <div class="toolbar">
       <label class="file-label">
-        📂 元GLB読込
+        📂 GLB読込
         <input type="file" id="fileInput" accept=".glb,.gltf" />
       </label>
-      <label class="file-label warning-btn" title="保存したプロジェクトファイル(.json)を読み込んで作業を復元">
-        📥 作業復元(.json)
+      <button id="restoreAutoSaveBtn" style="display:none;" class="warning-btn" title="ブラウザに自動保存された前回の作業を復元します">🔄 前回の続きを復元</button>
+      <label class="file-label" title="保存したプロジェクトファイル(.json)を読み込んで復元">
+        📥 読込(.json)
         <input type="file" id="loadProjectInput" accept=".json" />
       </label>
-      <button id="saveProjectBtn" class="warning-btn" disabled title="現在の編集状態をプロジェクトファイル(.json)として保存">💾 作業保存(.json)</button>
-      <button id="undoBtn" disabled title="直前の操作を1つ巻き戻します">↩ 1つ戻る</button>
+      <button id="saveProjectBtn" disabled title="現在の編集状態をファイル(.json)として保存">💾 保存(.json)</button>
+      <button id="undoBtn" disabled title="直前の操作を1つだけ巻き戻します">↩ 1つ戻る (<span id="undoCount">0</span>)</button>
+      <button id="redoBtn" disabled title="戻した操作を1つやり直します">↪ 1つ進む</button>
       <button id="clearSelectionBtn" disabled>選択解除</button>
       <button id="exportBtn" class="success" disabled>編集済みGLB出力</button>
     </div>
@@ -561,6 +588,8 @@
 
     const viewport = document.getElementById('viewport');
     const fileInput = document.getElementById('fileInput');
+    const restoreAutoSaveBtn = document.getElementById('restoreAutoSaveBtn');
+    const autosaveStatus = document.getElementById('autosaveStatus');
     const loadProjectInput = document.getElementById('loadProjectInput');
     const saveProjectBtn = document.getElementById('saveProjectBtn');
     const selectedListEl = document.getElementById('selectedList');
@@ -574,6 +603,8 @@
     const combineMeshRBtn = document.getElementById('combineMeshRBtn');
     const clearSelectionBtn = document.getElementById('clearSelectionBtn');
     const undoBtn = document.getElementById('undoBtn');
+    const undoCountEl = document.getElementById('undoCount');
+    const redoBtn = document.getElementById('redoBtn');
     const exportBtn = document.getElementById('exportBtn');
     const toastEl = document.getElementById('toast');
 
@@ -663,7 +694,7 @@
     });
 
     let loadedRoot = null;
-    let loadedFileName = 'model.glb';
+    let loadedFileName = 'model';
     const selectableMeshes = [];
     const selectedMeshes = new Set();
     const groupedMeshes = new Set();
@@ -673,7 +704,9 @@
     const groupedOverlays = new Map();
     const createdItems = [];
 
+    // 確実な1つ戻る(Undo)・1つ進む(Redo)スタック
     const undoStack = [];
+    const redoStack = [];
     let lCounter = 1;
     let rCounter = 1;
 
@@ -695,60 +728,263 @@
       showToast._timer = setTimeout(() => toastEl.classList.remove('show'), 2600);
     }
 
-    function pushUndoState() {
-      if (!loadedRoot) return;
-      const exporter = new GLTFExporter();
-      exporter.parse(loadedRoot, (glbuf) => {
-        const stateObj = {
-          buffer: glbuf,
-          lCounter,
-          rCounter,
-          createdItemsMeta: createdItems.map(item => ({ type: item.type, name: item.object.name }))
+    // ==========================================
+    // 大容量対応 IndexedDB オートセーブ基盤
+    // ==========================================
+    const DB_NAME = 'GlbTrackEditorDB';
+    const STORE_NAME = 'autosave';
+
+    function openDB() {
+      return new Promise((resolve, reject) => {
+        const req = indexedDB.open(DB_NAME, 1);
+        req.onupgradeneeded = (e) => {
+          const db = e.target.result;
+          if (!db.objectStoreNames.contains(STORE_NAME)) {
+            db.createObjectStore(STORE_NAME);
+          }
         };
-        undoStack.push(stateObj);
-        if (undoStack.length > 15) undoStack.shift();
-        undoBtn.disabled = false;
-        saveAutoSaveStorage(glbuf);
-      }, () => {}, { binary: true });
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+      });
     }
 
-    // ブラウザLocalStorageへのオートセーブ
-    function saveAutoSaveStorage(glbuf) {
+    async function writeAutoSaveToDB(record) {
       try {
-        const bytes = new Uint8Array(glbuf);
-        let binary = '';
-        for (let i = 0; i < bytes.byteLength; i++) {
-          binary += String.fromCharCode(bytes[i]);
-        }
-        const data = {
-          filename: loadedFileName,
-          lCounter,
-          rCounter,
-          createdItemsMeta: createdItems.map(item => ({ type: item.type, name: item.object.name })),
-          modelBase64: btoa(binary)
-        };
-        localStorage.setItem('glb_tool_autosave_v2', JSON.stringify(data));
+        autosaveStatus.className = 'autosave-badge saving';
+        autosaveStatus.textContent = '💾 自動保存中...';
+        const db = await openDB();
+        const tx = db.transaction(STORE_NAME, 'readwrite');
+        tx.objectStore(STORE_NAME).put(record, 'latest_session');
+        await new Promise((res, rej) => {
+          tx.oncomplete = res;
+          tx.onerror = () => rej(tx.error);
+        });
+        const now = new Date();
+        const timeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
+        autosaveStatus.className = 'autosave-badge saved';
+        autosaveStatus.textContent = `🟢 自動保存済 (${timeStr})`;
       } catch (e) {
-        console.warn('オートセーブ容量超過', e);
+        console.error('IndexedDB保存エラー:', e);
+        autosaveStatus.className = 'autosave-badge';
+        autosaveStatus.textContent = '⚠️ 自動保存失敗';
       }
     }
 
+    async function readAutoSaveFromDB() {
+      try {
+        const db = await openDB();
+        const tx = db.transaction(STORE_NAME, 'readonly');
+        const req = tx.objectStore(STORE_NAME).get('latest_session');
+        return await new Promise((res, rej) => {
+          req.onsuccess = () => res(req.result);
+          req.onerror = () => rej(req.error);
+        });
+      } catch (e) {
+        console.error('IndexedDB読込エラー:', e);
+        return null;
+      }
+    }
+
+    // ハイライトを一時解除したクリーンな状態でバイナリGLBを生成するヘルパー
+    function exportCleanSceneBuffer() {
+      return new Promise((resolve, reject) => {
+        if (!loadedRoot) return reject('No model');
+
+        const prevSelected = Array.from(selectedMeshes);
+        prevSelected.forEach(m => removeHighlight(m));
+        groupedMeshes.forEach(m => removeGroupedRedHighlight(m));
+
+        // 元のマテリアルを確実に復元した状態で書き出し
+        groupedMeshes.forEach(m => {
+          if (originalMaterials.has(m.uuid)) {
+            m.material = originalMaterials.get(m.uuid);
+          }
+        });
+
+        const exporter = new GLTFExporter();
+        exporter.parse(
+          loadedRoot,
+          (glbuf) => {
+            // 画面の赤・青ハイライトを元に戻す
+            groupedMeshes.forEach(m => applyGroupedRedHighlight(m));
+            prevSelected.forEach(m => applyHighlight(m));
+            resolve(glbuf);
+          },
+          (err) => {
+            groupedMeshes.forEach(m => applyGroupedRedHighlight(m));
+            prevSelected.forEach(m => applyHighlight(m));
+            reject(err);
+          },
+          { binary: true }
+        );
+      });
+    }
+
+    // 現在のスナップショットオブジェクトを作成
+    async function captureCurrentSnapshot() {
+      const buffer = await exportCleanSceneBuffer();
+      return {
+        buffer,
+        filename: loadedFileName,
+        lCounter,
+        rCounter,
+        createdItemsMeta: createdItems.map(item => ({ type: item.type, name: item.object.name })),
+        savedAt: Date.now()
+      };
+    }
+
+    // Undo履歴のUIボタン更新
+    function updateUndoRedoButtons() {
+      undoCountEl.textContent = undoStack.length;
+      undoBtn.disabled = undoStack.length === 0;
+      redoBtn.disabled = redoStack.length === 0;
+    }
+
+    // 1つ戻る（Undo）実行
+    undoBtn.addEventListener('click', async () => {
+      if (undoStack.length === 0 || !loadedRoot) return;
+      undoBtn.disabled = true;
+      redoBtn.disabled = true;
+
+      try {
+        resetActiveTestRotation();
+        // 「1つ進む」で戻れるように現在の状態を redoStack へ退避
+        const currentSnap = await captureCurrentSnapshot();
+        redoStack.push(currentSnap);
+
+        const prevSnap = undoStack.pop();
+        await restoreFromSnapshot(prevSnap, false);
+        await writeAutoSaveToDB(prevSnap);
+        showToast(`1つ前の状態に戻しました（残り履歴: ${undoStack.length}件）`);
+      } catch (e) {
+        console.error(e);
+        alert('1つ戻る処理に失敗しました');
+      } finally {
+        updateUndoRedoButtons();
+      }
+    });
+
+    // 1つ進む（Redo）実行
+    redoBtn.addEventListener('click', async () => {
+      if (redoStack.length === 0 || !loadedRoot) return;
+      undoBtn.disabled = true;
+      redoBtn.disabled = true;
+
+      try {
+        resetActiveTestRotation();
+        const currentSnap = await captureCurrentSnapshot();
+        undoStack.push(currentSnap);
+
+        const nextSnap = redoStack.pop();
+        await restoreFromSnapshot(nextSnap, false);
+        await writeAutoSaveToDB(nextSnap);
+        showToast('1つ進みました (Redo)');
+      } catch (e) {
+        console.error(e);
+      } finally {
+        updateUndoRedoButtons();
+      }
+    });
+
+    // スナップショットからシーンを完全復元（カメラ位置は維持）
+    function restoreFromSnapshot(snap, resetCamera = false) {
+      return new Promise((resolve, reject) => {
+        const loader = new GLTFLoader();
+        loader.parse(snap.buffer, '', (gltf) => {
+          clearAllSelections();
+          if (loadedRoot) {
+            scene.remove(loadedRoot);
+          }
+          selectableMeshes.length = 0;
+          groupedMeshes.clear();
+          createdItems.length = 0;
+          originalMaterials.clear();
+          highlightOverlays.clear();
+          groupedOverlays.clear();
+          activeTestTarget = null;
+          testBar.style.display = 'none';
+
+          loadedRoot = gltf.scene;
+          scene.add(loadedRoot);
+          loadedRoot.updateMatrixWorld(true);
+
+          loadedFileName = snap.filename || 'model';
+          lCounter = snap.lCounter || 1;
+          rCounter = snap.rCounter || 1;
+          const metaList = snap.createdItemsMeta || [];
+
+          loadedRoot.traverse((obj) => {
+            if (obj.isMesh) {
+              if (!obj.name) obj.name = `Mesh_${obj.id}`;
+              selectableMeshes.push(obj);
+
+              const matchedMeta = metaList.find(m => m.name === obj.name && m.type === 'mergedMesh');
+              if (matchedMeta) {
+                groupedMeshes.add(obj);
+                applyGroupedRedHighlight(obj);
+                createdItems.push({ type: 'mergedMesh', object: obj });
+              }
+            } else if ((obj.isGroup || obj.type === 'Object3D') && obj.name) {
+              const matchedMeta = metaList.find(m => m.name === obj.name && m.type === 'group');
+              if (matchedMeta) {
+                obj.traverse(child => {
+                  if (child.isMesh) {
+                    groupedMeshes.add(child);
+                    applyGroupedRedHighlight(child);
+                  }
+                });
+                createdItems.push({ type: 'group', object: obj });
+              }
+            }
+          });
+
+          if (resetCamera) {
+            const box = new THREE.Box3().setFromObject(loadedRoot);
+            if (!box.isEmpty()) {
+              const center = box.getCenter(new THREE.Vector3());
+              const size = box.getSize(new THREE.Vector3());
+              const maxDim = Math.max(size.x, size.y, size.z);
+              const dist = maxDim * 1.8 || 3;
+
+              baseModelScale = Math.max(0.05, maxDim * 0.35);
+              updateAxisVisualScale();
+
+              controls.target.copy(center);
+              camera.position.set(center.x + dist * 0.7, center.y + dist * 0.6, center.z + dist * 0.9);
+              camera.near = Math.max(0.0005, maxDim / 2000);
+              camera.far = Math.max(1000, maxDim * 100);
+              camera.updateProjectionMatrix();
+              controls.update();
+            }
+          }
+
+          exportBtn.disabled = false;
+          saveProjectBtn.disabled = false;
+          updateUI();
+          resolve();
+        }, (err) => {
+          reject(err);
+        });
+      });
+    }
+
     // 手動プロジェクト保存(.json)
-    saveProjectBtn.addEventListener('click', () => {
+    saveProjectBtn.addEventListener('click', async () => {
       if (!loadedRoot) return;
       resetActiveTestRotation();
-      const exporter = new GLTFExporter();
-      exporter.parse(loadedRoot, (glbuf) => {
-        const bytes = new Uint8Array(glbuf);
+      try {
+        const snap = await captureCurrentSnapshot();
+        const bytes = new Uint8Array(snap.buffer);
         let binary = '';
-        for (let i = 0; i < bytes.byteLength; i++) {
-          binary += String.fromCharCode(bytes[i]);
+        const chunkSize = 0x8000;
+        for (let i = 0; i < bytes.length; i += chunkSize) {
+          binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunkSize));
         }
         const projectData = {
-          filename: loadedFileName,
-          lCounter,
-          rCounter,
-          createdItemsMeta: createdItems.map(item => ({ type: item.type, name: item.object.name })),
+          filename: snap.filename,
+          lCounter: snap.lCounter,
+          rCounter: snap.rCounter,
+          createdItemsMeta: snap.createdItemsMeta,
           modelBase64: btoa(binary)
         };
         const blob = new Blob([JSON.stringify(projectData)], { type: 'application/json' });
@@ -758,7 +994,10 @@
         link.click();
         URL.revokeObjectURL(link.href);
         showToast('作業プロジェクト(.json)を保存しました');
-      }, () => { alert('プロジェクト保存に失敗しました'); }, { binary: true });
+      } catch (e) {
+        console.error(e);
+        alert('プロジェクト保存に失敗しました');
+      }
     });
 
     // プロジェクト読込(.json)
@@ -766,42 +1005,35 @@
       const file = e.target.files[0];
       if (!file) return;
       const reader = new FileReader();
-      reader.onload = (evt) => {
+      reader.onload = async (evt) => {
         try {
           const data = JSON.parse(evt.target.result);
-          loadedFileName = data.filename || 'model';
-          lCounter = data.lCounter || 1;
-          rCounter = data.rCounter || 1;
-
           const binary = atob(data.modelBase64);
           const len = binary.length;
           const bytes = new Uint8Array(len);
           for (let i = 0; i < len; i++) {
             bytes[i] = binary.charCodeAt(i);
           }
-
-          loadGlbFromBuffer(bytes.buffer, loadedFileName, data.createdItemsMeta || []);
-          showToast('プロジェクトを復元しました');
+          const snap = {
+            buffer: bytes.buffer,
+            filename: data.filename || 'model',
+            lCounter: data.lCounter || 1,
+            rCounter: data.rCounter || 1,
+            createdItemsMeta: data.createdItemsMeta || [],
+            savedAt: Date.now()
+          };
+          undoStack.length = 0;
+          redoStack.length = 0;
+          await restoreFromSnapshot(snap, true);
+          await writeAutoSaveToDB(snap);
+          updateUndoRedoButtons();
+          showToast('プロジェクトファイル(.json)を復元しました');
         } catch (err) {
           console.error(err);
           alert('プロジェクトファイルの読み込みに失敗しました。');
         }
       };
       reader.readAsText(file);
-    });
-
-    undoBtn.addEventListener('click', () => {
-      if (undoStack.length === 0 || !loadedRoot) return;
-      resetActiveTestRotation();
-      clearAllSelections();
-
-      const prevState = undoStack.pop();
-      undoBtn.disabled = undoStack.length === 0;
-
-      loadGlbFromBuffer(prevState.buffer, loadedFileName, prevState.createdItemsMeta);
-      lCounter = prevState.lCounter;
-      rCounter = prevState.rCounter;
-      showToast('直前の操作を1つ戻しました (Undo)');
     });
 
     function setGizmoMode(mode) {
@@ -1012,10 +1244,15 @@
       if (wasSelected) applyHighlight(mesh);
     }
 
-    applyMeshPivotOnlyBtn.addEventListener('click', () => {
+    applyMeshPivotOnlyBtn.addEventListener('click', async () => {
       if (selectedMeshes.size === 0) return;
       resetActiveTestRotation();
-      pushUndoState();
+
+      // 変更前の状態をUndoに保存
+      const beforeSnap = await captureCurrentSnapshot();
+      undoStack.push(beforeSnap);
+      if (undoStack.length > 30) undoStack.shift();
+      redoStack.length = 0;
 
       const targetPos = pivotAnchor.position.clone();
       const targetQuat = preserveOrientationChk.checked
@@ -1028,7 +1265,12 @@
       });
 
       updateUI();
-      pushUndoState();
+      updateUndoRedoButtons();
+
+      // 変更後の状態をオートセーブ
+      const afterSnap = await captureCurrentSnapshot();
+      await writeAutoSaveToDB(afterSnap);
+
       showToast(`${meshes.length} 個のメッシュに中心座標と軸姿勢を適用しました`);
     });
 
@@ -1352,11 +1594,17 @@
       return name;
     }
 
-    function executeGroupMerge(prefix) {
+    // ① グループ化処理
+    async function executeGroupMerge(prefix) {
       if (selectedMeshes.size === 0 || !loadedRoot) return;
 
       resetActiveTestRotation();
-      pushUndoState();
+
+      // 操作前の状態を確定させてUndoに積む
+      const beforeSnap = await captureCurrentSnapshot();
+      undoStack.push(beforeSnap);
+      if (undoStack.length > 30) undoStack.shift();
+      redoStack.length = 0;
 
       const groupName = getNextName(prefix);
 
@@ -1400,15 +1648,26 @@
       createdItems.push({ type: 'group', object: newGroup });
       groupNameInput.value = '';
       updateUI();
-      pushUndoState();
+      updateUndoRedoButtons();
+
+      // 操作後の状態をIndexedDBへ自動保存
+      const afterSnap = await captureCurrentSnapshot();
+      await writeAutoSaveToDB(afterSnap);
+
       showToast(`グループ「${groupName}」を作成しました (${meshesToGroup.length}個)`);
     }
 
-    function executeCombineIntoSingleMesh(prefix) {
+    // ② 1メッシュ結合処理
+    async function executeCombineIntoSingleMesh(prefix) {
       if (selectedMeshes.size === 0 || !loadedRoot) return;
 
       resetActiveTestRotation();
-      pushUndoState();
+
+      // 操作前の状態を確定させてUndoに積む
+      const beforeSnap = await captureCurrentSnapshot();
+      undoStack.push(beforeSnap);
+      if (undoStack.length > 30) undoStack.shift();
+      redoStack.length = 0;
 
       const meshesToCombine = Array.from(selectedMeshes);
       const pivotWorldPos = pivotAnchor.position.clone();
@@ -1534,7 +1793,12 @@
       createdItems.push({ type: 'mergedMesh', object: mergedMesh });
       groupNameInput.value = '';
       updateUI();
-      pushUndoState();
+      updateUndoRedoButtons();
+
+      // 操作後の状態をIndexedDBへ自動保存
+      const afterSnap = await captureCurrentSnapshot();
+      await writeAutoSaveToDB(afterSnap);
+
       showToast(`「${mergedName}」として ${meshesToCombine.length} 個を1メッシュに結合しました`);
     }
 
@@ -1544,117 +1808,55 @@
     combineMeshRBtn.addEventListener('click', () => executeCombineIntoSingleMesh('R'));
     clearSelectionBtn.addEventListener('click', clearAllSelections);
 
-    function loadGlbFromBuffer(arrayBuffer, fileName, createdItemsMeta = []) {
-      const loader = new GLTFLoader();
-      loader.parse(arrayBuffer, '', (gltf) => {
-        clearAllSelections();
-        if (loadedRoot) {
-          scene.remove(loadedRoot);
-        }
-        selectableMeshes.length = 0;
-        groupedMeshes.clear();
-        createdItems.length = 0;
-        originalMaterials.clear();
-        highlightOverlays.clear();
-        groupedOverlays.clear();
-        undoStack.length = 0;
-        undoBtn.disabled = true;
-        activeTestTarget = null;
-        testBar.style.display = 'none';
-
-        loadedRoot = gltf.scene;
-        scene.add(loadedRoot);
-        loadedRoot.updateMatrixWorld(true);
-
-        loadedRoot.traverse((obj) => {
-          if (obj.isMesh) {
-            if (!obj.name) obj.name = `Mesh_${obj.id}`;
-            selectableMeshes.push(obj);
-
-            const matchedMeta = createdItemsMeta.find(m => m.name === obj.name);
-            if (matchedMeta) {
-              groupedMeshes.add(obj);
-              applyGroupedRedHighlight(obj);
-              createdItems.push({ type: matchedMeta.type, object: obj });
-            }
-          } else if (obj.isGroup && obj.name) {
-            const matchedMeta = createdItemsMeta.find(m => m.name === obj.name);
-            if (matchedMeta) {
-              obj.traverse(child => {
-                if (child.isMesh) {
-                  groupedMeshes.add(child);
-                  applyGroupedRedHighlight(child);
-                }
-              });
-              createdItems.push({ type: 'group', object: obj });
-            }
-          }
-        });
-
-        const box = new THREE.Box3().setFromObject(loadedRoot);
-        if (!box.isEmpty()) {
-          const center = box.getCenter(new THREE.Vector3());
-          const size = box.getSize(new THREE.Vector3());
-          const maxDim = Math.max(size.x, size.y, size.z);
-          const dist = maxDim * 1.8 || 3;
-
-          baseModelScale = Math.max(0.05, maxDim * 0.35);
-          updateAxisVisualScale();
-
-          controls.target.copy(center);
-          camera.position.set(center.x + dist * 0.7, center.y + dist * 0.6, center.z + dist * 0.9);
-          camera.near = Math.max(0.0005, maxDim / 2000);
-          camera.far = Math.max(1000, maxDim * 100);
-          camera.updateProjectionMatrix();
-          controls.update();
-        }
-
-        exportBtn.disabled = false;
-        saveProjectBtn.disabled = false;
-        updateUI();
-        showToast(`「${fileName}」を読み込みました`);
-      }, (err) => {
-        console.error(err);
-        alert('GLBファイルの読み込みに失敗しました。');
-      });
-    }
-
+    // GLBファイル新規読み込み
     fileInput.addEventListener('change', (e) => {
       const file = e.target.files[0];
       if (!file) return;
 
-      loadedFileName = file.name.replace(/\.(glb|gltf)$/i, '');
+      const baseName = file.name.replace(/\.(glb|gltf)$/i, '');
       const reader = new FileReader();
-      reader.onload = (evt) => {
-        loadGlbFromBuffer(evt.target.result, file.name);
-        pushUndoState();
+      reader.onload = async (evt) => {
+        const snap = {
+          buffer: evt.target.result,
+          filename: baseName,
+          lCounter: 1,
+          rCounter: 1,
+          createdItemsMeta: [],
+          savedAt: Date.now()
+        };
+        undoStack.length = 0;
+        redoStack.length = 0;
+        await restoreFromSnapshot(snap, true);
+        await writeAutoSaveToDB(snap);
+        updateUndoRedoButtons();
+        showToast(`「${file.name}」を読み込みました（メッシュ数: ${selectableMeshes.length}）`);
       };
       reader.readAsArrayBuffer(file);
     });
 
-    // 起動時のブラウザ自動セーブ(LocalStorage)復元チェック
-    window.addEventListener('DOMContentLoaded', () => {
-      const saved = localStorage.getItem('glb_tool_autosave_v2');
-      if (saved) {
-        try {
-          const data = JSON.parse(saved);
-          if (confirm(`前回作業していたモデル「${data.filename}」のオートセーブデータが見つかりました。復元しますか？`)) {
-            loadedFileName = data.filename;
-            lCounter = data.lCounter || 1;
-            rCounter = data.rCounter || 1;
-
-            const binary = atob(data.modelBase64);
-            const len = binary.length;
-            const bytes = new Uint8Array(len);
-            for (let i = 0; i < len; i++) {
-              bytes[i] = binary.charCodeAt(i);
-            }
-            loadGlbFromBuffer(bytes.buffer, data.filename + '.glb', data.createdItemsMeta || []);
-          }
-        } catch (e) {
-          console.warn('オートセーブ復元失敗', e);
-        }
+    // 起動時にIndexedDBから前回のオートセーブを自動チェック
+    let cachedAutoSave = null;
+    window.addEventListener('DOMContentLoaded', async () => {
+      cachedAutoSave = await readAutoSaveFromDB();
+      if (cachedAutoSave && cachedAutoSave.buffer) {
+        const d = new Date(cachedAutoSave.savedAt || Date.now());
+        const timeLabel = `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+        restoreAutoSaveBtn.style.display = 'inline-flex';
+        restoreAutoSaveBtn.textContent = `🔄 前回の続きを復元 (${cachedAutoSave.filename} - ${timeLabel})`;
+        autosaveStatus.textContent = `復元可能データあり (${timeLabel})`;
       }
+    });
+
+    restoreAutoSaveBtn.addEventListener('click', async () => {
+      if (!cachedAutoSave) return;
+      undoStack.length = 0;
+      redoStack.length = 0;
+      await restoreFromSnapshot(cachedAutoSave, true);
+      updateUndoRedoButtons();
+      restoreAutoSaveBtn.style.display = 'none';
+      autosaveStatus.className = 'autosave-badge saved';
+      autosaveStatus.textContent = '🟢 前回データから復元完了';
+      showToast(`「${cachedAutoSave.filename}」の作業状態を復元しました`);
     });
 
     exportBtn.addEventListener('click', () => {
@@ -1666,6 +1868,11 @@
       clearAllSelections();
 
       groupedMeshes.forEach(mesh => removeGroupedRedHighlight(mesh));
+      groupedMeshes.forEach(mesh => {
+        if (originalMaterials.has(mesh.uuid)) {
+          mesh.material = originalMaterials.get(mesh.uuid);
+        }
+      });
 
       const exporter = new GLTFExporter();
       exporter.parse(
