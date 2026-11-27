@@ -704,7 +704,6 @@
     const groupedOverlays = new Map();
     const createdItems = [];
 
-    // 確実な1つ戻る(Undo)・1つ進む(Redo)スタック
     const undoStack = [];
     const redoStack = [];
     let lCounter = 1;
@@ -728,9 +727,6 @@
       showToast._timer = setTimeout(() => toastEl.classList.remove('show'), 2600);
     }
 
-    // ==========================================
-    // 大容量対応 IndexedDB オートセーブ基盤
-    // ==========================================
     const DB_NAME = 'GlbTrackEditorDB';
     const STORE_NAME = 'autosave';
 
@@ -785,7 +781,6 @@
       }
     }
 
-    // ハイライトを一時解除したクリーンな状態でバイナリGLBを生成するヘルパー
     function exportCleanSceneBuffer() {
       return new Promise((resolve, reject) => {
         if (!loadedRoot) return reject('No model');
@@ -794,7 +789,6 @@
         prevSelected.forEach(m => removeHighlight(m));
         groupedMeshes.forEach(m => removeGroupedRedHighlight(m));
 
-        // 元のマテリアルを確実に復元した状態で書き出し
         groupedMeshes.forEach(m => {
           if (originalMaterials.has(m.uuid)) {
             m.material = originalMaterials.get(m.uuid);
@@ -805,7 +799,6 @@
         exporter.parse(
           loadedRoot,
           (glbuf) => {
-            // 画面の赤・青ハイライトを元に戻す
             groupedMeshes.forEach(m => applyGroupedRedHighlight(m));
             prevSelected.forEach(m => applyHighlight(m));
             resolve(glbuf);
@@ -820,7 +813,6 @@
       });
     }
 
-    // 現在のスナップショットオブジェクトを作成
     async function captureCurrentSnapshot() {
       const buffer = await exportCleanSceneBuffer();
       return {
@@ -833,14 +825,12 @@
       };
     }
 
-    // Undo履歴のUIボタン更新
     function updateUndoRedoButtons() {
       undoCountEl.textContent = undoStack.length;
       undoBtn.disabled = undoStack.length === 0;
       redoBtn.disabled = redoStack.length === 0;
     }
 
-    // 1つ戻る（Undo）実行
     undoBtn.addEventListener('click', async () => {
       if (undoStack.length === 0 || !loadedRoot) return;
       undoBtn.disabled = true;
@@ -848,7 +838,6 @@
 
       try {
         resetActiveTestRotation();
-        // 「1つ進む」で戻れるように現在の状態を redoStack へ退避
         const currentSnap = await captureCurrentSnapshot();
         redoStack.push(currentSnap);
 
@@ -864,7 +853,6 @@
       }
     });
 
-    // 1つ進む（Redo）実行
     redoBtn.addEventListener('click', async () => {
       if (redoStack.length === 0 || !loadedRoot) return;
       undoBtn.disabled = true;
@@ -886,7 +874,6 @@
       }
     });
 
-    // スナップショットからシーンを完全復元（カメラ位置は維持）
     function restoreFromSnapshot(snap, resetCamera = false) {
       return new Promise((resolve, reject) => {
         const loader = new GLTFLoader();
@@ -968,7 +955,6 @@
       });
     }
 
-    // 手動プロジェクト保存(.json)
     saveProjectBtn.addEventListener('click', async () => {
       if (!loadedRoot) return;
       resetActiveTestRotation();
@@ -1000,7 +986,6 @@
       }
     });
 
-    // プロジェクト読込(.json)
     loadProjectInput.addEventListener('change', (e) => {
       const file = e.target.files[0];
       if (!file) return;
@@ -1248,7 +1233,6 @@
       if (selectedMeshes.size === 0) return;
       resetActiveTestRotation();
 
-      // 変更前の状態をUndoに保存
       const beforeSnap = await captureCurrentSnapshot();
       undoStack.push(beforeSnap);
       if (undoStack.length > 30) undoStack.shift();
@@ -1267,7 +1251,6 @@
       updateUI();
       updateUndoRedoButtons();
 
-      // 変更後の状態をオートセーブ
       const afterSnap = await captureCurrentSnapshot();
       await writeAutoSaveToDB(afterSnap);
 
@@ -1600,7 +1583,6 @@
 
       resetActiveTestRotation();
 
-      // 操作前の状態を確定させてUndoに積む
       const beforeSnap = await captureCurrentSnapshot();
       undoStack.push(beforeSnap);
       if (undoStack.length > 30) undoStack.shift();
@@ -1647,10 +1629,19 @@
 
       createdItems.push({ type: 'group', object: newGroup });
       groupNameInput.value = '';
+
+      // 【修正】作成したグループ内のメッシュを自動選択状態にして、すぐに次を実行できるようにする
+      newGroup.traverse(child => {
+        if (child.isMesh) {
+          selectedMeshes.add(child);
+          applyHighlight(child);
+        }
+      });
+      computeAutoCenterAndOrientation();
+
       updateUI();
       updateUndoRedoButtons();
 
-      // 操作後の状態をIndexedDBへ自動保存
       const afterSnap = await captureCurrentSnapshot();
       await writeAutoSaveToDB(afterSnap);
 
@@ -1663,7 +1654,6 @@
 
       resetActiveTestRotation();
 
-      // 操作前の状態を確定させてUndoに積む
       const beforeSnap = await captureCurrentSnapshot();
       undoStack.push(beforeSnap);
       if (undoStack.length > 30) undoStack.shift();
@@ -1792,10 +1782,15 @@
 
       createdItems.push({ type: 'mergedMesh', object: mergedMesh });
       groupNameInput.value = '';
+
+      // 【修正】新しくできた1メッシュを自動選択状態にして、すぐに次の結合が押せるようにする
+      selectedMeshes.add(mergedMesh);
+      applyHighlight(mergedMesh);
+      computeAutoCenterAndOrientation();
+
       updateUI();
       updateUndoRedoButtons();
 
-      // 操作後の状態をIndexedDBへ自動保存
       const afterSnap = await captureCurrentSnapshot();
       await writeAutoSaveToDB(afterSnap);
 
@@ -1808,7 +1803,6 @@
     combineMeshRBtn.addEventListener('click', () => executeCombineIntoSingleMesh('R'));
     clearSelectionBtn.addEventListener('click', clearAllSelections);
 
-    // GLBファイル新規読み込み
     fileInput.addEventListener('change', (e) => {
       const file = e.target.files[0];
       if (!file) return;
@@ -1834,7 +1828,6 @@
       reader.readAsArrayBuffer(file);
     });
 
-    // 起動時にIndexedDBから前回のオートセーブを自動チェック
     let cachedAutoSave = null;
     window.addEventListener('DOMContentLoaded', async () => {
       cachedAutoSave = await readAutoSaveFromDB();
