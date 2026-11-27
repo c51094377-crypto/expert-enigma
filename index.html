@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>GLB 履帯グループ化＆1メッシュ結合ツール</title>
+  <title>GLB 履帯グループ化 ＆ 1メッシュ結合ツール（色・マテリアル保持対応）</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
@@ -96,7 +96,7 @@
       min-height: 0;
     }
 
-    /* 左サイドバー（見切れ防止のため全体を柔軟にスクロール・収容） */
+    /* 左サイドバー */
     aside {
       width: 390px;
       background: #171a21;
@@ -185,7 +185,6 @@
       color: #fff;
     }
 
-    /* 操作エリア（コンパクト配置） */
     .controls-area {
       padding: 8px 10px;
       background: #1a1d24;
@@ -195,7 +194,6 @@
       border-bottom: 1px solid #2c313c;
     }
 
-    /* 実行ボタンエリア（一番押しやすい位置に配置） */
     .execute-box {
       background: #13161c;
       border: 1px solid #333a48;
@@ -221,7 +219,6 @@
       padding: 6px 8px;
     }
 
-    /* ピボット直感操作パネル */
     .pivot-box {
       background: #121418;
       border: 1px solid #2f3542;
@@ -337,7 +334,6 @@
       line-height: 1.4;
     }
 
-    /* 回転テストバー */
     .test-bar {
       padding: 7px 10px;
       background: #1e222b;
@@ -356,7 +352,6 @@
       flex: 1;
     }
 
-    /* 3Dビューポート */
     #viewport {
       flex: 1;
       position: relative;
@@ -401,7 +396,6 @@
     }
   </style>
 
-  <!-- Three.js Import Map -->
   <script type="importmap">
     {
       "imports": {
@@ -413,7 +407,7 @@
 </head>
 <body>
   <header>
-    <h1>GLB 履帯グループ化 ＆ 1メッシュ結合ツール</h1>
+    <h1>GLB 履帯グループ化 ＆ 1メッシュ結合ツール（色保持対応）</h1>
     <div class="toolbar">
       <label class="file-label">
         GLBファイルを選択
@@ -426,7 +420,6 @@
 
   <div class="main-container">
     <aside>
-      <!-- 1. 選択中のメッシュリスト -->
       <div class="panel-section">
         <div class="panel-header">
           <span>選択中のメッシュ</span>
@@ -439,7 +432,6 @@
         </div>
       </div>
 
-      <!-- 2. グループ化・1メッシュ結合 実行エリア（見切れ防止のため上部に配置） -->
       <div class="controls-area">
         <div class="execute-box">
           <input type="text" id="groupNameInput" placeholder="名前入力 (空欄ならL1, R1自動連番)" />
@@ -457,7 +449,6 @@
           </div>
         </div>
 
-        <!-- 3. 中心・軸の直感操作パネル -->
         <div class="pivot-box">
           <div class="pivot-header">
             <span>🎯 中心・軸の直感操作</span>
@@ -513,7 +504,6 @@
         </div>
       </div>
 
-      <!-- 4. 作成済みグループ・結合メッシュ一覧 -->
       <div class="panel-section" style="flex: 1; min-height: 120px;">
         <div class="panel-header">
           <span>作成済みグループ ／ 結合メッシュ</span>
@@ -523,7 +513,6 @@
           <div class="empty-msg">グループ化・1メッシュ結合した結果がここに表示されます</div>
         </div>
 
-        <!-- 動作確認用テスト回転バー -->
         <div class="test-bar" id="testBar" style="display:none;">
           <div style="display:flex; justify-content:space-between; align-items:center;">
             <span>🔄 <strong id="testingTargetName">L1</strong> ローカル軸テスト</span>
@@ -562,7 +551,6 @@
     import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
     import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js';
 
-    // DOM要素
     const viewport = document.getElementById('viewport');
     const fileInput = document.getElementById('fileInput');
     const selectedListEl = document.getElementById('selectedList');
@@ -578,7 +566,6 @@
     const exportBtn = document.getElementById('exportBtn');
     const toastEl = document.getElementById('toast');
 
-    // ピボット・ギズモ関連DOM
     const gizmoMoveBtn = document.getElementById('gizmoMoveBtn');
     const gizmoRotateBtn = document.getElementById('gizmoRotateBtn');
     const gizmoHideBtn = document.getElementById('gizmoHideBtn');
@@ -597,7 +584,6 @@
     const applyMeshPivotOnlyBtn = document.getElementById('applyMeshPivotOnlyBtn');
     const testSelectedMeshBtn = document.getElementById('testSelectedMeshBtn');
 
-    // 回転テスト関連DOM
     const testBar = document.getElementById('testBar');
     const testingTargetNameEl = document.getElementById('testingTargetName');
     const testAxisSelect = document.getElementById('testAxisSelect');
@@ -605,7 +591,6 @@
     const testRotVal = document.getElementById('testRotVal');
     const resetTestRotBtn = document.getElementById('resetTestRotBtn');
 
-    // Three.js 基本セットアップ
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(45, viewport.clientWidth / viewport.clientHeight, 0.002, 1000);
     camera.position.set(3, 2.5, 4);
@@ -621,7 +606,6 @@
     controls.enableDamping = true;
     controls.dampingFactor = 0.06;
 
-    // ライティング
     scene.add(new THREE.AmbientLight(0xffffff, 1.2));
     const dirLight1 = new THREE.DirectionalLight(0xffffff, 1.8);
     dirLight1.position.set(5, 10, 7);
@@ -633,7 +617,6 @@
     const gridHelper = new THREE.GridHelper(10, 20, 0x3b4252, 0x242933);
     scene.add(gridHelper);
 
-    // コンパクトなピボットマーカー
     const pivotAnchor = new THREE.Group();
     const pivotDot = new THREE.Mesh(
       new THREE.SphereGeometry(0.008, 12, 12),
@@ -647,7 +630,6 @@
     pivotAnchor.visible = false;
     scene.add(pivotAnchor);
 
-    // 3D空間で直接ドラッグ操作できる TransformControls
     const transformControls = new TransformControls(camera, renderer.domElement);
     transformControls.setSpace('local');
     transformControls.setSize(0.5);
@@ -669,7 +651,6 @@
       syncUIFromPivotAnchor();
     });
 
-    // 状態管理
     let loadedRoot = null;
     let loadedFileName = 'model.glb';
     const selectableMeshes = [];
@@ -684,7 +665,6 @@
     let lCounter = 1;
     let rCounter = 1;
 
-    // ピボット状態
     let isPickingPivot = false;
     let hasCustomPivotPos = false;
     let gizmoMode = 'translate';
@@ -693,7 +673,6 @@
     const currentPivotWorldPos = new THREE.Vector3();
     const currentPivotWorldQuat = new THREE.Quaternion();
 
-    // テスト回転対象
     let activeTestTarget = null;
     let activeTestInitialQuat = new THREE.Quaternion();
 
@@ -937,10 +916,11 @@
       showToast(`「${firstMesh.name}」のローカル軸で回転テストします`);
     });
 
-    // 青色ハイライト
+    // 青色ハイライト（元のマテリアルを正しく保持）
     function applyHighlight(mesh) {
       if (highlightOverlays.has(mesh.uuid)) return;
 
+      // 既に一時退避されていなければ、現在のマテリアル（結合後のマテリアル配列含む）を保存
       if (!originalMaterials.has(mesh.uuid)) {
         originalMaterials.set(mesh.uuid, mesh.material);
       }
@@ -1044,7 +1024,6 @@
       }
     }
 
-    // 選択トグル
     function toggleMeshSelection(mesh) {
       if (!mesh) return;
       if (selectedMeshes.has(mesh)) {
@@ -1075,7 +1054,6 @@
       updateUI();
     }
 
-    // UIリスト更新
     function updateUI() {
       selectedCountEl.textContent = selectedMeshes.size;
       const hasSel = selectedMeshes.size >= 1 && Boolean(loadedRoot);
@@ -1153,7 +1131,6 @@
         });
       }
 
-      // 作成済みグループ・結合メッシュ一覧更新
       groupCountEl.textContent = createdItems.length;
       if (createdItems.length === 0) {
         groupListEl.innerHTML = `<div class="empty-msg">グループ化・1メッシュ結合した結果がここに表示されます</div>`;
@@ -1255,7 +1232,6 @@
       return name;
     }
 
-    // ① グループ化処理
     function executeGroupMerge(prefix) {
       if (selectedMeshes.size === 0 || !loadedRoot) return;
 
@@ -1305,7 +1281,7 @@
       showToast(`グループ「${groupName}」を作成しました (${meshesToGroup.length}個)`);
     }
 
-    // ② 1メッシュ結合処理
+    // 1メッシュ結合処理（マテリアル・色を完璧に保持する修正版）
     function executeCombineIntoSingleMesh(prefix) {
       if (selectedMeshes.size === 0 || !loadedRoot) return;
 
@@ -1317,6 +1293,7 @@
         ? pivotAnchor.quaternion.clone()
         : new THREE.Quaternion();
 
+      // 一旦ハイライトを解除し、各メッシュの元のマテリアルを確実に取り出す
       clearAllSelections();
       meshesToCombine.forEach(m => {
         if (groupedMeshes.has(m)) {
@@ -1366,8 +1343,10 @@
           }
         }
 
+        // 元のメッシュのマテリアル（単体または配列）を取得して統合マテリアルリストに登録
         const meshMaterials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
-        if (geo.groups && geo.groups.length > 0 && Array.isArray(mesh.material)) {
+        
+        if (geo.groups && geo.groups.length > 0) {
           geo.groups.forEach(g => {
             const mat = meshMaterials[g.materialIndex] || meshMaterials[0];
             let matIdx = combinedMaterials.indexOf(mat);
@@ -1403,9 +1382,14 @@
       mergedGeometry.computeBoundingSphere();
 
       const mergedName = getNextName(prefix);
+      
+      // 統合されたマテリアル配列（または単一マテリアル）を設定
       const finalMaterial = combinedMaterials.length === 1 ? combinedMaterials[0] : combinedMaterials;
       const mergedMesh = new THREE.Mesh(mergedGeometry, finalMaterial);
       mergedMesh.name = mergedName;
+
+      // 結合メッシュ自体の元マテリアルとしても登録（赤色ハイライト・解除時に色を正しく復元するため）
+      originalMaterials.set(mergedMesh.uuid, mergedMesh.material);
 
       loadedRoot.add(mergedMesh);
       loadedRoot.updateMatrixWorld(true);
@@ -1432,7 +1416,7 @@
       createdItems.push({ type: 'mergedMesh', object: mergedMesh });
       groupNameInput.value = '';
       updateUI();
-      showToast(`「${mergedName}」として ${meshesToCombine.length} 個を1メッシュに結合しました`);
+      showToast(`「${mergedName}」として ${meshesToCombine.length} 個を1メッシュに結合しました（色保持）`);
     }
 
     mergeLBtn.addEventListener('click', () => executeGroupMerge('L'));
@@ -1441,7 +1425,6 @@
     combineMeshRBtn.addEventListener('click', () => executeCombineIntoSingleMesh('R'));
     clearSelectionBtn.addEventListener('click', clearAllSelections);
 
-    // GLBファイル読み込み
     fileInput.addEventListener('change', (e) => {
       const file = e.target.files[0];
       if (!file) return;
@@ -1505,7 +1488,6 @@
       });
     });
 
-    // 編集済みGLBのエクスポート
     exportBtn.addEventListener('click', () => {
       if (!loadedRoot) return;
 
@@ -1543,7 +1525,6 @@
       );
     });
 
-    // 3Dビューポート上のクリック判定
     const raycaster = new THREE.Raycaster();
     const pointer = new THREE.Vector2();
     let pointerDownPos = { x: 0, y: 0 };
@@ -1581,14 +1562,12 @@
       }
     });
 
-    // リサイズ対応
     window.addEventListener('resize', () => {
       camera.aspect = viewport.clientWidth / viewport.clientHeight;
       camera.updateProjectionMatrix();
       renderer.setSize(viewport.clientWidth, viewport.clientHeight);
     });
 
-    // レンダリングループ
     function animate() {
       requestAnimationFrame(animate);
       controls.update();
