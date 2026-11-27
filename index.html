@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>GLB 履帯結合・グループ化 (形状崩壊完全修正版)</title>
+  <title>GLB 履帯結合・グループ化 (表裏・形状完全修復版)</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
     body {
@@ -428,7 +428,7 @@
 </head>
 <body>
   <header>
-    <h1>GLB 履帯結合・グループ化 (形状崩壊完全修正版)</h1>
+    <h1>GLB 履帯結合・グループ化 (表裏・形状完全修復版)</h1>
     <div class="toolbar">
       <label class="file-label">
         GLB読込
@@ -457,7 +457,7 @@
         <div class="execute-box">
           <input type="text" id="groupNameInput" placeholder="名前入力 (空欄ならL1, R1自動連番)" />
 
-          <div class="action-section-label">🧩 1メッシュ結合（形状・スケール完全維持統合）</div>
+          <div class="action-section-label">🧩 1メッシュ結合（表裏反転修復・形状完全維持）</div>
           <div class="group-btn-row">
             <button id="combineMeshLBtn" class="primary" style="background:#7c3aed; border-color:#8b5cf6;" disabled>[L] 1メッシュ結合</button>
             <button id="combineMeshRBtn" class="primary" style="background:#c026d3; border-color:#d946ef;" disabled>[R] 1メッシュ結合</button>
@@ -886,6 +886,45 @@
       showToast('軸の傾きを水平（0°）にリセットしました');
     });
 
+    // マイナススケール（ミラー反転）を考慮したジオメトリ行列適用ヘルパー
+    function applyMatrixSafelyToGeometry(geometry, matrix) {
+      geometry.applyMatrix4(matrix);
+
+      // 行列式が負（マイナススケール反転を含む）の場合、面の表裏（頂点順序）が裏返るため修正する
+      if (matrix.determinant() < 0) {
+        const posAttr = geometry.attributes.position;
+        const normAttr = geometry.attributes.normal;
+        const uvAttr = geometry.attributes.uv;
+
+        for (let i = 0; i < posAttr.count; i += 3) {
+          // 頂点 1 と 2 を入れ替えてワインディングオーダーを元に戻す
+          const x1 = posAttr.getX(i + 1), y1 = posAttr.getY(i + 1), z1 = posAttr.getZ(i + 1);
+          const x2 = posAttr.getX(i + 2), y2 = posAttr.getY(i + 2), z2 = posAttr.getZ(i + 2);
+          posAttr.setXYZ(i + 1, x2, y2, z2);
+          posAttr.setXYZ(i + 2, x1, y1, z1);
+
+          if (normAttr) {
+            const nx1 = normAttr.getX(i + 1), ny1 = normAttr.getY(i + 1), nz1 = normAttr.getZ(i + 1);
+            const nx2 = normAttr.getX(i + 2), ny2 = normAttr.getY(i + 2), nz2 = normAttr.getZ(i + 2);
+            normAttr.setXYZ(i + 1, nx2, ny2, nz2);
+            normAttr.setXYZ(i + 2, nx1, ny1, nz1);
+          }
+
+          if (uvAttr) {
+            const u1 = uvAttr.getX(i + 1), v1 = uvAttr.getY(i + 1);
+            const u2 = uvAttr.getX(i + 2), v2 = uvAttr.getY(i + 2);
+            uvAttr.setXY(i + 1, u2, v2);
+            uvAttr.setXY(i + 2, u1, v1);
+          }
+        }
+        posAttr.needsUpdate = true;
+        if (normAttr) normAttr.needsUpdate = true;
+        if (uvAttr) uvAttr.needsUpdate = true;
+      }
+
+      geometry.computeVertexNormals();
+    }
+
     function setMeshTransformOriginAndOrientation(mesh, targetWorldPos, targetWorldQuat) {
       if (!mesh || !mesh.geometry) return;
 
@@ -903,10 +942,14 @@
         .invert()
         .multiply(oldWorldMatrix);
 
-      mesh.geometry = mesh.geometry.clone();
-      mesh.geometry.applyMatrix4(geoTransformMatrix);
-      mesh.geometry.computeBoundingBox();
-      mesh.geometry.computeBoundingSphere();
+      let geo = mesh.geometry.clone();
+      if (geo.index) {
+        geo = geo.toNonIndexed();
+      }
+      applyMatrixSafelyToGeometry(geo, geoTransformMatrix);
+      geo.computeBoundingBox();
+      geo.computeBoundingSphere();
+      mesh.geometry = geo;
 
       if (mesh.parent) {
         mesh.parent.updateWorldMatrix(true, false);
@@ -1270,6 +1313,7 @@
       return name;
     }
 
+    // ① グループ化処理
     function executeGroupMerge(prefix) {
       if (selectedMeshes.size === 0 || !loadedRoot) return;
 
@@ -1320,7 +1364,7 @@
       showToast(`グループ「${groupName}」を作成しました`);
     }
 
-    // ③ 【修正版】完全に形状・スケール崩壊を防ぎ、見た目通りの形を維持して1メッシュ結合する処理
+    // ② 完全に表裏・形状・両面描画を維持する1メッシュ結合処理
     function executeCombineIntoSingleMesh(prefix) {
       if (selectedMeshes.size === 0 || !loadedRoot) return;
 
@@ -1344,7 +1388,6 @@
         }
       });
 
-      // 目標となるワールド行列
       const targetWorldMat = new THREE.Matrix4().compose(
         pivotWorldPos,
         pivotWorldQuat,
@@ -1364,22 +1407,16 @@
 
         mesh.updateWorldMatrix(true, false);
 
-        // ★【重要修正】各メッシュのローカル変形（スケール等）の歪みを防ぐため、
-        // ジオメトリを複製して頂点自体に現在のmatrixWorldを完全にベイク（焼き込み）する
+        // 元のメッシュから新ピボットのローカル空間への正確な変換行列
+        const toNewLocalMat = new THREE.Matrix4().multiplyMatrices(targetWorldInv, mesh.matrixWorld);
+
         let geo = mesh.geometry.clone();
         if (geo.index) {
           geo = geo.toNonIndexed();
         }
 
-        // 頂点にワールド行列を直接適用して絶対的な形を確定
-        geo.applyMatrix4(mesh.matrixWorld);
-
-        // その後、新しく設定する目標ピボットのローカル空間に変換
-        geo.applyMatrix4(targetWorldInv);
-
-        if (!geo.attributes.normal) {
-          geo.computeVertexNormals();
-        }
+        // マイナススケール反転を自動検出し、頂点順序(表裏)を修復しながら変換を適用
+        applyMatrixSafelyToGeometry(geo, toNewLocalMat);
 
         const posCount = geo.attributes.position.count;
         if (!geo.attributes.uv) {
@@ -1387,6 +1424,7 @@
           geo.setAttribute('uv', new THREE.BufferAttribute(dummyUv, 2));
         }
 
+        // position, normal, uv 以外の不要属性とグループ情報を整理
         const allowedAttrs = ['position', 'normal', 'uv'];
         for (const attrName of Object.keys(geo.attributes)) {
           if (!allowedAttrs.includes(attrName)) {
@@ -1414,12 +1452,14 @@
       mergedGeometry.computeBoundingBox();
       mergedGeometry.computeBoundingSphere();
 
+      // 両面描画（DoubleSide）を設定して、どの面も透けずに確実に描画されるマテリアルを作成
       const cleanMaterial = new THREE.MeshStandardMaterial({
         name: `${prefix}_CombinedMat`,
         color: (baseSourceMaterial && baseSourceMaterial.color) ? baseSourceMaterial.color.clone() : new THREE.Color(0x888888),
         map: (baseSourceMaterial && baseSourceMaterial.map) ? baseSourceMaterial.map : null,
         roughness: (baseSourceMaterial && typeof baseSourceMaterial.roughness === 'number') ? baseSourceMaterial.roughness : 0.6,
-        metalness: (baseSourceMaterial && typeof baseSourceMaterial.metalness === 'number') ? baseSourceMaterial.metalness : 0.2
+        metalness: (baseSourceMaterial && typeof baseSourceMaterial.metalness === 'number') ? baseSourceMaterial.metalness : 0.2,
+        side: THREE.DoubleSide
       });
 
       const mergedName = getNextName(prefix);
@@ -1433,6 +1473,7 @@
       localMat.decompose(mergedMesh.position, mergedMesh.quaternion, mergedMesh.scale);
       mergedMesh.updateMatrixWorld(true);
 
+      // 元の個別メッシュを削除
       meshesToCombine.forEach(oldMesh => {
         if (oldMesh.parent) {
           oldMesh.parent.remove(oldMesh);
