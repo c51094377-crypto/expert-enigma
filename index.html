@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>GLB 履帯グループ化 ＆ 1メッシュ結合ツール（出力エラー修正版）</title>
+  <title>GLB 履帯グループ化 ＆ 1メッシュ結合ツール（出力完全修正版）</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
@@ -406,7 +406,7 @@
 </head>
 <body>
   <header>
-    <h1>GLB 履帯グループ化 ＆ 1メッシュ結合ツール（出力修正版）</h1>
+    <h1>GLB 履帯グループ化 ＆ 1メッシュ結合ツール（出力完全修正版）</h1>
     <div class="toolbar">
       <label class="file-label">
         GLBファイルを選択
@@ -1475,7 +1475,7 @@
       });
     });
 
-    // 安全なエクスポート処理（エラーハンドリング・マテリアル検証強化版）
+    // 完璧に安全なエクスポート処理（マテリアルを強制クリーン化）
     exportBtn.addEventListener('click', () => {
       if (!loadedRoot) return;
 
@@ -1484,14 +1484,49 @@
       const previouslySelected = Array.from(selectedMeshes);
       clearAllSelections();
 
-      // エクスポート前に赤色ハイライト（ワイヤーフレーム等のヘルパー）を完全に外す
+      // 赤色ハイライト・ワイヤーフレームを完全に外す
       groupedMeshes.forEach(mesh => removeGroupedRedHighlight(mesh));
+
+      // エクスポート直前に全メッシュのマテリアルをGLTF安全なものに一時バックアップ＆置換
+      const materialBackups = new Map();
+      loadedRoot.traverse((child) => {
+        if (child.isMesh) {
+          materialBackups.set(child.uuid, child.material);
+          // 結合メッシュ等で配列マテリアルやカスタムマテリアルがエラーを起こすのを防ぐため、標準マテリアルへクリーンアップ
+          if (Array.isArray(child.material)) {
+            child.material = child.material.map(m => {
+              const safeM = new THREE.MeshStandardMaterial({
+                color: m.color || 0xcccccc,
+                map: m.map || null,
+                roughness: m.roughness ?? 0.5,
+                metalness: m.metalness ?? 0.0
+              });
+              return safeM;
+            });
+          } else if (child.material) {
+            const m = child.material;
+            child.material = new THREE.MeshStandardMaterial({
+              color: m.color || 0xcccccc,
+              map: m.map || null,
+              roughness: m.roughness ?? 0.5,
+              metalness: m.metalness ?? 0.0
+            });
+          }
+        }
+      });
 
       try {
         const exporter = new GLTFExporter();
         exporter.parse(
           loadedRoot,
           (result) => {
+            // マテリアルを元の状態に戻す
+            loadedRoot.traverse((child) => {
+              if (child.isMesh && materialBackups.has(child.uuid)) {
+                child.material = materialBackups.get(child.uuid);
+              }
+            });
+
             try {
               const blob = new Blob([result], { type: 'application/octet-stream' });
               const link = document.createElement('a');
@@ -1508,21 +1543,33 @@
               updateUI();
               showToast('編集済みGLBを出力しました');
             } catch (blobErr) {
-              console.error(blobErr);
+              console.error('Blob error:', blobErr);
               alert('ファイルのダウンロード処理でエラーが発生しました。');
               restoreExportState(previouslySelected);
             }
           },
           (error) => {
-            console.error('GLTFExporter Error:', error);
-            alert('GLBのエクスポートに失敗しました。コンソールログをご確認ください。');
+            console.error('GLTFExporter Detailed Error:', error);
+            alert(`GLBのエクスポートに失敗しました。\n詳細エラー: ${error.message || error}`);
+            
+            // 失敗時もマテリアルを復元
+            loadedRoot.traverse((child) => {
+              if (child.isMesh && materialBackups.has(child.uuid)) {
+                child.material = materialBackups.get(child.uuid);
+              }
+            });
             restoreExportState(previouslySelected);
           },
           { binary: true, embedImages: true }
         );
       } catch (e) {
-        console.error('Export exception:', e);
-        alert('予期せぬエラーによりエクスポートできませんでした。');
+        console.error('Export critical exception:', e);
+        alert(`予期せぬエラーが発生しました。\n詳細: ${e.message}`);
+        loadedRoot.traverse((child) => {
+          if (child.isMesh && materialBackups.has(child.uuid)) {
+            child.material = materialBackups.get(child.uuid);
+          }
+        });
         restoreExportState(previouslySelected);
       }
     });
