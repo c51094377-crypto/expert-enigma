@@ -443,7 +443,7 @@
         <input type="file" id="fileInput" accept=".glb,.gltf" />
       </label>
       <button id="restoreAutoSaveBtn" style="display:none;" class="warning-btn">🔄 前回の続きを復元</button>
-      <label class="file-label" title="保存したプロジェクトファイル(.json)を読み込んで復元">
+      <label class="file-label" title="プロジェクト(.json)読込">
         📥 読込(.json)
         <input type="file" id="loadProjectInput" accept=".json" />
       </label>
@@ -493,9 +493,9 @@
           </div>
 
           <div class="gizmo-btn-group">
-            <button id="gizmoMoveBtn" class="gizmo-active" disabled title="3D矢印をドラッグして中心位置を移動">✥ 移動</button>
-            <button id="gizmoRotateBtn" disabled title="3Dリングをドラッグして軸の傾きを回転">↻ 回転</button>
-            <button id="gizmoHideBtn" disabled title="ギズモを一時的に隠す">👁 非表示</button>
+            <button id="gizmoMoveBtn" class="gizmo-active" disabled title="移動ギズモ">✥ 移動</button>
+            <button id="gizmoRotateBtn" disabled title="回転ギズモ">↻ 回転</button>
+            <button id="gizmoHideBtn" disabled title="非表示">👁 非表示</button>
           </div>
 
           <div class="quick-btn-group">
@@ -572,9 +572,9 @@
 
     <div id="viewport">
       <div class="hud-hint">
-        <strong>操作:</strong> メッシュをタップ: 選択 ｜ <strong>3D矢印/リングドラッグ: 調整</strong> ｜ 空白ドラッグ: カメラ回転<br>
-        <span style="color:#10b981; font-weight:600;">● 緑点＋細軸:</span> 中心＆ローカル軸 ｜
-        <span style="color:#ef4444; font-weight:600;">■ 赤色:</span> 結合済み
+        <strong>操作:</strong> メッシュをタップ: 選択 ｜ <strong>3D矢印/リング: 調整</strong> ｜ 空白ドラッグ: カメラ回転<br>
+        <span style="color:#3b82f6; font-weight:600;">■ 青色 (黄枠):</span> 選択中 ｜
+        <span style="color:#ef4444; font-weight:600;">■ 赤紫/赤:</span> 結合・グループ化済み
       </div>
       <div class="toast" id="toast"></div>
     </div>
@@ -726,7 +726,7 @@
       toastEl.textContent = msg;
       toastEl.classList.add('show');
       clearTimeout(showToast._timer);
-      showToast._timer = setTimeout(() => toastEl.classList.remove('show'), 2600);
+      showToast._timer = setTimeout(() => toastEl.classList.remove('show'), 2200);
     }
 
     const DB_NAME = 'GlbTrackEditorDB';
@@ -846,10 +846,9 @@
         const prevSnap = undoStack.pop();
         await restoreFromSnapshot(prevSnap, false);
         await writeAutoSaveToDB(prevSnap);
-        showToast(`1つ戻しました（残り履歴: ${undoStack.length}件）`);
+        showToast('1つ戻しました');
       } catch (e) {
         console.error(e);
-        alert('1つ戻る処理に失敗しました');
       } finally {
         updateUndoRedoButtons();
       }
@@ -981,10 +980,9 @@
         link.download = `${loadedFileName}_project.json`;
         link.click();
         URL.revokeObjectURL(link.href);
-        showToast('プロジェクト(.json)を保存しました');
+        showToast('プロジェクト保存完了');
       } catch (e) {
         console.error(e);
-        alert('プロジェクト保存に失敗しました');
       }
     });
 
@@ -1014,10 +1012,9 @@
           await restoreFromSnapshot(snap, true);
           await writeAutoSaveToDB(snap);
           updateUndoRedoButtons();
-          showToast('プロジェクトを復元しました');
+          showToast('プロジェクト復元完了');
         } catch (err) {
           console.error(err);
-          alert('プロジェクトファイルの読み込みに失敗しました。');
         }
       };
       reader.readAsText(file);
@@ -1176,13 +1173,13 @@
       pickPivotBtn.classList.remove('mode-active');
       viewport.classList.remove('picking-pivot');
       computeAutoCenterAndOrientation();
-      showToast('選択メッシュの中心へ移動しました');
+      showToast('選択中心へ移動しました');
     });
 
     resetRotAxisBtn.addEventListener('click', () => {
       currentPivotWorldQuat.identity();
       setPivotTransform(currentPivotWorldPos, currentPivotWorldQuat, hasCustomPivotPos);
-      showToast('傾きをリセットしました');
+      showToast('傾きリセット完了');
     });
 
     function setMeshTransformOriginAndOrientation(mesh, targetWorldPos, targetWorldQuat) {
@@ -1256,16 +1253,17 @@
       const afterSnap = await captureCurrentSnapshot();
       await writeAutoSaveToDB(afterSnap);
 
-      showToast(`${meshes.length}個の原点を変更しました`);
+      showToast('原点のみ適用しました');
     });
 
     testSelectedMeshBtn.addEventListener('click', () => {
       if (selectedMeshes.size === 0) return;
       const firstMesh = Array.from(selectedMeshes)[0];
       startRotationTest(firstMesh, `メッシュ: ${firstMesh.name}`);
-      showToast('回転テストを開始します');
+      showToast('回転テスト開始');
     });
 
+    // 選択中メッシュのハイライト（はっきりした青色 ＆ 黄色ワイヤーフレーム）
     function applyHighlight(mesh) {
       if (highlightOverlays.has(mesh.uuid)) return;
 
@@ -1276,10 +1274,10 @@
       const cloneMat = (mat) => {
         const m = mat.clone();
         if ('emissive' in m) {
-          m.emissive = new THREE.Color(0x1d4ed8);
-          m.emissiveIntensity = 0.55;
+          m.emissive = new THREE.Color(0x2563eb); // 鮮やかな青発光
+          m.emissiveIntensity = 0.65;
         } else if ('color' in m) {
-          m.color.lerp(new THREE.Color(0x3b82f6), 0.45);
+          m.color.lerp(new THREE.Color(0x3b82f6), 0.6);
         }
         return m;
       };
@@ -1292,12 +1290,12 @@
         color: 0x38bdf8,
         depthTest: true,
         transparent: true,
-        opacity: 0.85
+        opacity: 0.95
       });
       const wireMesh = new THREE.LineSegments(wireGeo, wireMat);
       mesh.add(wireMesh);
 
-      const boxHelper = new THREE.BoxHelper(mesh, 0xfacc15);
+      const boxHelper = new THREE.BoxHelper(mesh, 0xfacc15); // 黄色枠
       scene.add(boxHelper);
 
       highlightOverlays.set(mesh.uuid, { boxHelper, wireMesh });
@@ -1327,6 +1325,7 @@
       }
     }
 
+    // 結合・グループ化済みメッシュのハイライト（はっきりした赤紫色 ＆ ピンクワイヤー）
     function applyGroupedRedHighlight(mesh) {
       if (groupedOverlays.has(mesh.uuid)) return;
 
@@ -1337,10 +1336,10 @@
       const cloneMat = (mat) => {
         const m = mat.clone();
         if ('emissive' in m) {
-          m.emissive = new THREE.Color(0x991b1b);
+          m.emissive = new THREE.Color(0x7c2d12); // 赤茶・赤紫系発光
           m.emissiveIntensity = 0.45;
         } else if ('color' in m) {
-          m.color.lerp(new THREE.Color(0xef4444), 0.4);
+          m.color.lerp(new THREE.Color(0xd97706), 0.35); // 少しオレンジ・銅色混じりの識別色
         }
         return m;
       };
@@ -1350,10 +1349,10 @@
 
       const wireGeo = new THREE.WireframeGeometry(mesh.geometry);
       const wireMat = new THREE.LineBasicMaterial({
-        color: 0xf87171,
+        color: 0xf43f5e, // 鮮やかなピンク赤ワイヤー
         depthTest: true,
         transparent: true,
-        opacity: 0.65
+        opacity: 0.8
       });
       const wireMesh = new THREE.LineSegments(wireGeo, wireMat);
       mesh.add(wireMesh);
@@ -1443,13 +1442,13 @@
             mesh.getWorldQuaternion(q);
             preserveOrientationChk.checked = true;
             setPivotTransform(pivotAnchor.position, q, hasCustomPivotPos);
-            showToast('傾きをコピーしました');
+            showToast('傾きコピー完了');
           };
 
           const showOriginBtn = document.createElement('button');
           showOriginBtn.className = 'action-btn';
           showOriginBtn.textContent = '原点';
-          showOriginBtn.title = '原点位置へ移動';
+          showOriginBtn.title = '原点へ移動';
           showOriginBtn.onclick = (e) => {
             e.stopPropagation();
             mesh.updateWorldMatrix(true, false);
@@ -1458,7 +1457,7 @@
             mesh.getWorldPosition(pos);
             mesh.getWorldQuaternion(q);
             setPivotTransform(pos, q, true);
-            showToast('原点へ移動しました');
+            showToast('原点へ移動');
           };
 
           const removeBtn = document.createElement('button');
@@ -1532,7 +1531,7 @@
             obj.getWorldQuaternion(worldQuat);
             setPivotTransform(worldPos, worldQuat, true);
             updateUI();
-            showToast(`「${obj.name}」を選択しました`);
+            showToast(`「${obj.name}」を選択`);
           };
 
           item.appendChild(nameSpan);
@@ -1788,168 +1787,4 @@
       updateUndoRedoButtons();
 
       const afterSnap = await captureCurrentSnapshot();
-      await writeAutoSaveToDB(afterSnap);
-
-      showToast(`「${mergedName}」に結合しました`);
-    }
-
-    mergeLBtn.addEventListener('click', () => executeGroupMerge('L'));
-    mergeRBtn.addEventListener('click', () => executeGroupMerge('R'));
-    combineMeshLBtn.addEventListener('click', () => executeCombineIntoSingleMesh('L'));
-    combineMeshRBtn.addEventListener('click', () => executeCombineIntoSingleMesh('R'));
-    clearSelectionBtn.addEventListener('click', clearAllSelections);
-
-    fileInput.addEventListener('change', (e) => {
-      const file = e.target.files[0];
-      if (!file) return;
-
-      const baseName = file.name.replace(/\.(glb|gltf)$/i, '');
-      const reader = new FileReader();
-      reader.onload = async (evt) => {
-        const snap = {
-          buffer: evt.target.result,
-          filename: baseName,
-          lCounter: 1,
-          rCounter: 1,
-          createdItemsMeta: [],
-          savedAt: Date.now()
-        };
-        undoStack.length = 0;
-        redoStack.length = 0;
-        await restoreFromSnapshot(snap, true);
-        await writeAutoSaveToDB(snap);
-        updateUndoRedoButtons();
-        showToast(`読み込み完了 (${selectableMeshes.length}メッシュ)`);
-      };
-      reader.readAsArrayBuffer(file);
-    });
-
-    let cachedAutoSave = null;
-    window.addEventListener('DOMContentLoaded', async () => {
-      cachedAutoSave = await readAutoSaveFromDB();
-      if (cachedAutoSave && cachedAutoSave.buffer) {
-        const d = new Date(cachedAutoSave.savedAt || Date.now());
-        const timeLabel = `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
-        restoreAutoSaveBtn.style.display = 'inline-flex';
-        restoreAutoSaveBtn.textContent = `🔄 続きを復元 (${cachedAutoSave.filename})`;
-        autosaveStatus.textContent = `復元データあり (${timeLabel})`;
-      }
-    });
-
-    restoreAutoSaveBtn.addEventListener('click', async () => {
-      if (!cachedAutoSave) return;
-      undoStack.length = 0;
-      redoStack.length = 0;
-      await restoreFromSnapshot(cachedAutoSave, true);
-      updateUndoRedoButtons();
-      restoreAutoSaveBtn.style.display = 'none';
-      autosaveStatus.className = 'autosave-badge saved';
-      autosaveStatus.textContent = '🟢 復元完了';
-      showToast('作業状態を復元しました');
-    });
-
-    exportBtn.addEventListener('click', () => {
-      if (!loadedRoot) return;
-
-      resetActiveTestRotation();
-
-      const previouslySelected = Array.from(selectedMeshes);
-      clearAllSelections();
-
-      groupedMeshes.forEach(mesh => removeGroupedRedHighlight(mesh));
-      groupedMeshes.forEach(mesh => {
-        if (originalMaterials.has(mesh.uuid)) {
-          mesh.material = originalMaterials.get(mesh.uuid);
-        }
-      });
-
-      const exporter = new GLTFExporter();
-      exporter.parse(
-        loadedRoot,
-        (result) => {
-          const blob = new Blob([result], { type: 'application/octet-stream' });
-          const link = document.createElement('a');
-          link.href = URL.createObjectURL(blob);
-          link.download = `${loadedFileName}_edited.glb`;
-          link.click();
-          URL.revokeObjectURL(link.href);
-
-          groupedMeshes.forEach(mesh => applyGroupedRedHighlight(mesh));
-          previouslySelected.forEach(m => {
-            selectedMeshes.add(m);
-            applyHighlight(m);
-          });
-          updateUI();
-          showToast('GLBを出力しました');
-        },
-        (error) => {
-          console.error(error);
-          alert('出力エラーが発生しました。');
-        },
-        { binary: true }
-      );
-    });
-
-    const raycaster = new THREE.Raycaster();
-    const pointer = new THREE.Vector2();
-    let pointerDownPos = { x: 0, y: 0 };
-    let pointerDownTime = 0;
-
-    renderer.domElement.addEventListener('pointerdown', (e) => {
-      pointerDownPos = { x: e.clientX, y: e.clientY };
-      pointerDownTime = Date.now();
-    });
-
-    renderer.domElement.addEventListener('pointerup', (e) => {
-      if (e.button !== 0 && e.pointerType === 'mouse') return;
-      if (isDraggingGizmo || transformControls.axis !== null) return;
-
-      const moveDist = Math.hypot(e.clientX - pointerDownPos.x, e.clientY - pointerDownPos.y);
-      const elapsed = Date.now() - pointerDownTime;
-
-      // タップ判定の緩和（指が少し動いてもタップとみなす）
-      if (moveDist > 12 || elapsed > 600) return;
-
-      const rect = renderer.domElement.getBoundingClientRect();
-      pointer.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
-      pointer.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
-
-      raycaster.setFromCamera(pointer, camera);
-      
-      // 【改善】スマホの指先でも当たりやすいようレイキャスターの閾値（判定の太さ）を拡大
-      raycaster.params.Line.threshold = 0.1;
-      raycaster.params.Points.threshold = 0.1;
-
-      const intersects = raycaster.intersectObjects(selectableMeshes, false);
-
-      if (intersects.length > 0) {
-        if (isPickingPivot) {
-          const hitPoint = intersects[0].point;
-          setPivotTransform(hitPoint, pivotAnchor.quaternion, true);
-          isPickingPivot = false;
-          pickPivotBtn.classList.remove('mode-active');
-          viewport.classList.remove('picking-pivot');
-          showToast('中心を移動しました');
-        } else {
-          const hitMesh = intersects[0].object;
-          toggleMeshSelection(hitMesh);
-        }
-      }
-    });
-
-    window.addEventListener('resize', () => {
-      camera.aspect = viewport.clientWidth / viewport.clientHeight;
-      camera.updateProjectionMatrix();
-      renderer.setSize(viewport.clientWidth, viewport.clientHeight);
-    });
-
-    function animate() {
-      requestAnimationFrame(animate);
-      controls.update();
-      highlightOverlays.forEach(({ boxHelper }) => boxHelper.update());
-      renderer.render(scene, camera);
-    }
-    animate();
-  </script>
-</body>
-</html>
+      await writeAutoSaveToDB(
