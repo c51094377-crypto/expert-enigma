@@ -16,7 +16,7 @@
       overflow: hidden;
     }
     header {
-      height: 50px;
+      height: 48px;
       background: #1a1d24;
       border-bottom: 1px solid #2c313c;
       display: flex;
@@ -24,9 +24,10 @@
       justify-content: space-between;
       padding: 0 16px;
       gap: 12px;
+      flex-shrink: 0;
     }
     header h1 {
-      font-size: 14.5px;
+      font-size: 14px;
       font-weight: 600;
       color: #fff;
     }
@@ -39,14 +40,14 @@
       background: #2b303b;
       color: #e4e7ec;
       border: 1px solid #3c4250;
-      padding: 5px 11px;
-      border-radius: 6px;
-      font-size: 12.5px;
+      padding: 5px 10px;
+      border-radius: 5px;
+      font-size: 12px;
       cursor: pointer;
       transition: all 0.15s;
       display: inline-flex;
       align-items: center;
-      gap: 5px;
+      gap: 4px;
     }
     button:hover:not(:disabled), .file-label:hover {
       background: #383e4c;
@@ -92,28 +93,28 @@
       flex: 1;
       display: flex;
       overflow: hidden;
+      min-height: 0;
     }
 
-    /* 左サイドバー */
+    /* 左サイドバー（見切れ防止のため全体を柔軟にスクロール・収容） */
     aside {
-      width: 395px;
+      width: 390px;
       background: #171a21;
       border-right: 1px solid #2c313c;
       display: flex;
       flex-direction: column;
-      overflow: hidden;
+      overflow-y: auto;
+      overflow-x: hidden;
     }
     .panel-section {
       display: flex;
       flex-direction: column;
-      flex: 1;
-      min-height: 0;
       border-bottom: 1px solid #2c313c;
     }
     .panel-header {
-      padding: 8px 14px;
+      padding: 7px 12px;
       background: #1e222b;
-      font-size: 12px;
+      font-size: 11.5px;
       font-weight: 600;
       color: #9ca3af;
       display: flex;
@@ -130,21 +131,21 @@
       font-size: 11px;
     }
     .list-container {
-      flex: 1;
+      max-height: 155px;
+      min-height: 75px;
       overflow-y: auto;
-      padding: 8px;
-      min-height: 0;
+      padding: 6px 8px;
     }
     .list-item {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 6px 8px;
-      margin-bottom: 4px;
+      padding: 5px 8px;
+      margin-bottom: 3px;
       background: #222630;
       border: 1px solid #2f3542;
-      border-radius: 5px;
-      font-size: 12.5px;
+      border-radius: 4px;
+      font-size: 12px;
       gap: 4px;
     }
     .list-item.selected {
@@ -162,7 +163,7 @@
       background: transparent;
       border: none;
       color: #9ca3af;
-      padding: 2px 6px;
+      padding: 2px 5px;
       font-size: 11px;
       cursor: pointer;
       border-radius: 4px;
@@ -176,21 +177,48 @@
       background: #2b303b;
       border: 1px solid #3c4250;
       color: #cbd5e1;
-      padding: 3px 6px;
+      padding: 2px 6px;
     }
     .action-btn:hover {
       background: #3b82f6;
       border-color: #3b82f6;
       color: #fff;
     }
-    .panel-footer {
-      padding: 10px;
+
+    /* 操作エリア（コンパクト配置） */
+    .controls-area {
+      padding: 8px 10px;
       background: #1a1d24;
       display: flex;
       flex-direction: column;
-      gap: 7px;
-      flex-shrink: 0;
-      border-top: 1px solid #282d37;
+      gap: 6px;
+      border-bottom: 1px solid #2c313c;
+    }
+
+    /* 実行ボタンエリア（一番押しやすい位置に配置） */
+    .execute-box {
+      background: #13161c;
+      border: 1px solid #333a48;
+      border-radius: 6px;
+      padding: 7px 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+    .action-section-label {
+      font-size: 10.5px;
+      color: #94a3b8;
+      font-weight: 600;
+    }
+    .group-btn-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px;
+    }
+    .group-btn-row button {
+      justify-content: center;
+      font-size: 12px;
+      padding: 6px 8px;
     }
 
     /* ピボット直感操作パネル */
@@ -198,16 +226,16 @@
       background: #121418;
       border: 1px solid #2f3542;
       border-radius: 6px;
-      padding: 8px;
+      padding: 7px 8px;
       display: flex;
       flex-direction: column;
-      gap: 6px;
+      gap: 5px;
     }
     .pivot-header {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      font-size: 11.5px;
+      font-size: 11px;
       font-weight: 600;
       color: #e2e8f0;
     }
@@ -218,13 +246,13 @@
     }
     .gizmo-btn-group button, .quick-btn-group button {
       justify-content: center;
-      padding: 4px 4px;
+      padding: 3px 4px;
       font-size: 11px;
     }
     .size-slider-row {
       display: flex;
       align-items: center;
-      gap: 8px;
+      gap: 6px;
       font-size: 11px;
       color: #9ca3af;
     }
@@ -283,36 +311,19 @@
       color: #94a3b8;
       font-family: monospace;
       background: #1a1d24;
-      padding: 3px 6px;
+      padding: 2px 6px;
       border-radius: 4px;
       border: 1px solid #282d37;
     }
 
-    /* 実行ボタンエリア（グループ化 vs 1メッシュ結合） */
-    .action-section-label {
-      font-size: 10.5px;
-      color: #94a3b8;
-      font-weight: 600;
-      margin-top: 2px;
-    }
-    .group-btn-row {
-      display: flex;
-      gap: 6px;
-    }
-    .group-btn-row button {
-      flex: 1;
-      justify-content: center;
-      font-size: 12px;
-      padding: 6px 8px;
-    }
     input[type="text"] {
       width: 100%;
       background: #121418;
       border: 1px solid #3c4250;
       color: #fff;
-      padding: 5px 10px;
-      border-radius: 5px;
-      font-size: 12.5px;
+      padding: 5px 8px;
+      border-radius: 4px;
+      font-size: 12px;
     }
     input[type="text"]:focus {
       outline: none;
@@ -320,22 +331,21 @@
     }
     .empty-msg {
       color: #6b7280;
-      font-size: 12px;
+      font-size: 11.5px;
       text-align: center;
-      padding: 16px 12px;
-      line-height: 1.5;
+      padding: 12px 8px;
+      line-height: 1.4;
     }
 
     /* 回転テストバー */
     .test-bar {
-      padding: 8px 12px;
+      padding: 7px 10px;
       background: #1e222b;
       border-top: 1px solid #2c313c;
-      font-size: 12px;
+      font-size: 11.5px;
       display: flex;
       flex-direction: column;
-      gap: 6px;
-      flex-shrink: 0;
+      gap: 5px;
     }
     .test-row {
       display: flex;
@@ -383,6 +393,7 @@
       transform: translateY(-8px);
       transition: all 0.25s;
       pointer-events: none;
+      z-index: 100;
     }
     .toast.show {
       opacity: 1;
@@ -415,7 +426,7 @@
 
   <div class="main-container">
     <aside>
-      <!-- 選択中のメッシュリスト -->
+      <!-- 1. 選択中のメッシュリスト -->
       <div class="panel-section">
         <div class="panel-header">
           <span>選択中のメッシュ</span>
@@ -426,92 +437,89 @@
             GLBファイルを読み込み、<br>対象メッシュをクリックして選択してください。
           </div>
         </div>
+      </div>
 
-        <div class="panel-footer">
-          <!-- 直感的な中心＆軸設定パネル -->
-          <div class="pivot-box">
-            <div class="pivot-header">
-              <span>🎯 中心・軸の直感操作</span>
-              <span style="font-size:10.5px; color:#94a3b8;">3D上で直接ドラッグ可</span>
-            </div>
-
-            <!-- 3Dギズモモード切替 -->
-            <div class="gizmo-btn-group">
-              <button id="gizmoMoveBtn" class="gizmo-active" disabled title="3D矢印をドラッグして中心位置を移動">✥ 移動ギズモ</button>
-              <button id="gizmoRotateBtn" disabled title="3Dリングをドラッグして軸の傾きを回転">↻ 回転ギズモ</button>
-              <button id="gizmoHideBtn" disabled title="ギズモを一時的に隠してメッシュを選びやすくする">👁 ギズモ非表示</button>
-            </div>
-
-            <!-- ワンクリック配置ボタン -->
-            <div class="quick-btn-group">
-              <button id="pickPivotBtn" disabled title="クリックしたモデル表面へ中心を移動">📍 クリック配置</button>
-              <button id="autoCenterBtn" disabled title="選択中メッシュの真ん中へ中心を戻す">⊞ 選択中心へ</button>
-              <button id="resetRotAxisBtn" disabled title="軸の傾きを0°(水平)に戻す">⟲ 傾きリセット</button>
-            </div>
-
-            <!-- 軸サイズ調整スライダー -->
-            <div class="size-slider-row">
-              <span>軸サイズ</span>
-              <input type="range" id="axisScaleSlider" min="0.1" max="2.5" step="0.05" value="0.5" />
-              <span id="axisScaleVal" style="width:32px; text-align:right; font-family:monospace;">0.5x</span>
-            </div>
-
-            <!-- 数値微調整 -->
-            <div class="pivot-coords">
-              <div class="coord-field"><span>X</span><input type="number" id="pivotX" step="0.002" value="0" /></div>
-              <div class="coord-field"><span>Y</span><input type="number" id="pivotY" step="0.002" value="0" /></div>
-              <div class="coord-field"><span>Z</span><input type="number" id="pivotZ" step="0.002" value="0" /></div>
-            </div>
-
-            <div class="rot-info">
-              <span id="pivotRotDisplay">傾き: X:0.0° Y:0.0° Z:0.0°</span>
-            </div>
-
-            <label class="checkbox-row" title="ONにすると、設定した軸の傾きをそのままグループとメッシュのローカル軸として保持します">
-              <input type="checkbox" id="preserveOrientationChk" checked />
-              <span>この軸の傾き(回転姿勢)をローカル軸として保持</span>
-            </label>
-
-            <label class="checkbox-row" title="ONにすると、親グループだけでなく中に入る各メッシュ自体の原点（ジオメトリ中心）も指定位置へ移動します">
-              <input type="checkbox" id="applyToMeshOriginChk" checked />
-              <span>各メッシュ自身の中心(原点)もこの座標に設定</span>
-            </label>
-
-            <div style="display:flex; gap:4px;">
-              <button id="applyMeshPivotOnlyBtn" style="flex:1; justify-content:center; padding:4px 8px; font-size:11px; background:#0f766e; border-color:#14b8a6; color:#fff;" disabled>
-                メッシュ中心のみ適用
-              </button>
-              <button id="testSelectedMeshBtn" style="padding:4px 8px; font-size:11px;" disabled title="選択中メッシュのローカル軸回転を確認">
-                単体軸テスト
-              </button>
-            </div>
-          </div>
-
+      <!-- 2. グループ化・1メッシュ結合 実行エリア（見切れ防止のため上部に配置） -->
+      <div class="controls-area">
+        <div class="execute-box">
           <input type="text" id="groupNameInput" placeholder="名前入力 (空欄ならL1, R1自動連番)" />
 
-          <!-- ① グループ化（階層まとめ） -->
-          <div class="action-section-label">📁 グループ化（個別メッシュを残して階層化）</div>
-          <div class="group-btn-row">
-            <button id="mergeLBtn" class="primary" style="background:#2563eb;" disabled>[L] グループ化</button>
-            <button id="mergeRBtn" class="primary" style="background:#dc2626; border-color:#ef4444;" disabled>[R] グループ化</button>
-          </div>
-
-          <!-- ② 1つのメッシュに結合（ジオメトリ統合） -->
           <div class="action-section-label">🧩 メッシュ結合（選択メッシュを1つのメッシュに統合）</div>
           <div class="group-btn-row">
             <button id="combineMeshLBtn" class="primary" style="background:#7c3aed; border-color:#8b5cf6;" disabled>[L] 1メッシュ結合</button>
             <button id="combineMeshRBtn" class="primary" style="background:#c026d3; border-color:#d946ef;" disabled>[R] 1メッシュ結合</button>
           </div>
+
+          <div class="action-section-label">📁 グループ化（個別メッシュを残して階層化）</div>
+          <div class="group-btn-row">
+            <button id="mergeLBtn" class="primary" style="background:#2563eb;" disabled>[L] グループ化</button>
+            <button id="mergeRBtn" class="primary" style="background:#dc2626; border-color:#ef4444;" disabled>[R] グループ化</button>
+          </div>
+        </div>
+
+        <!-- 3. 中心・軸の直感操作パネル -->
+        <div class="pivot-box">
+          <div class="pivot-header">
+            <span>🎯 中心・軸の直感操作</span>
+            <span style="font-size:10px; color:#94a3b8;">3D上で直接ドラッグ可</span>
+          </div>
+
+          <div class="gizmo-btn-group">
+            <button id="gizmoMoveBtn" class="gizmo-active" disabled title="3D矢印をドラッグして中心位置を移動">✥ 移動ギズモ</button>
+            <button id="gizmoRotateBtn" disabled title="3Dリングをドラッグして軸の傾きを回転">↻ 回転ギズモ</button>
+            <button id="gizmoHideBtn" disabled title="ギズモを一時的に隠してメッシュを選びやすくする">👁 ギズモ非表示</button>
+          </div>
+
+          <div class="quick-btn-group">
+            <button id="pickPivotBtn" disabled title="クリックしたモデル表面へ中心を移動">📍 クリック配置</button>
+            <button id="autoCenterBtn" disabled title="選択中メッシュの真ん中へ中心を戻す">⊞ 選択中心へ</button>
+            <button id="resetRotAxisBtn" disabled title="軸の傾きを0°(水平)に戻す">⟲ 傾きリセット</button>
+          </div>
+
+          <div class="size-slider-row">
+            <span>軸サイズ</span>
+            <input type="range" id="axisScaleSlider" min="0.1" max="2.5" step="0.05" value="0.5" />
+            <span id="axisScaleVal" style="width:32px; text-align:right; font-family:monospace;">0.5x</span>
+          </div>
+
+          <div class="pivot-coords">
+            <div class="coord-field"><span>X</span><input type="number" id="pivotX" step="0.002" value="0" /></div>
+            <div class="coord-field"><span>Y</span><input type="number" id="pivotY" step="0.002" value="0" /></div>
+            <div class="coord-field"><span>Z</span><input type="number" id="pivotZ" step="0.002" value="0" /></div>
+          </div>
+
+          <div class="rot-info">
+            <span id="pivotRotDisplay">傾き: X:0.0° Y:0.0° Z:0.0°</span>
+          </div>
+
+          <label class="checkbox-row">
+            <input type="checkbox" id="preserveOrientationChk" checked />
+            <span>この軸の傾き(回転姿勢)をローカル軸として保持</span>
+          </label>
+
+          <label class="checkbox-row">
+            <input type="checkbox" id="applyToMeshOriginChk" checked />
+            <span>各メッシュ自身の中心(原点)もこの座標に設定</span>
+          </label>
+
+          <div style="display:flex; gap:4px;">
+            <button id="applyMeshPivotOnlyBtn" style="flex:1; justify-content:center; padding:4px 6px; font-size:11px; background:#0f766e; border-color:#14b8a6; color:#fff;" disabled>
+              メッシュ中心のみ適用
+            </button>
+            <button id="testSelectedMeshBtn" style="padding:4px 8px; font-size:11px;" disabled>
+              単体軸テスト
+            </button>
+          </div>
         </div>
       </div>
 
-      <!-- 作成されたグループ・結合メッシュ一覧 -->
-      <div class="panel-section" style="flex: 0.78;">
+      <!-- 4. 作成済みグループ・結合メッシュ一覧 -->
+      <div class="panel-section" style="flex: 1; min-height: 120px;">
         <div class="panel-header">
           <span>作成済みグループ ／ 結合メッシュ</span>
           <span class="badge" style="background:#059669;" id="groupCount">0</span>
         </div>
-        <div class="list-container" id="groupList">
+        <div class="list-container" id="groupList" style="max-height: none; flex: 1;">
           <div class="empty-msg">グループ化・1メッシュ結合した結果がここに表示されます</div>
         </div>
 
@@ -671,7 +679,6 @@
     const originalMaterials = new Map();
     const highlightOverlays = new Map();
     const groupedOverlays = new Map();
-    // { type: 'group' | 'mergedMesh', object: THREE.Object3D }
     const createdItems = [];
 
     let lCounter = 1;
@@ -859,7 +866,6 @@
       showToast('軸の傾きを水平（0°）にリセットしました');
     });
 
-    // メッシュ自身の原点とローカル軸を設定
     function setMeshTransformOriginAndOrientation(mesh, targetWorldPos, targetWorldQuat) {
       if (!mesh || !mesh.geometry) return;
 
@@ -1072,7 +1078,8 @@
     // UIリスト更新
     function updateUI() {
       selectedCountEl.textContent = selectedMeshes.size;
-      const hasSel = selectedMeshes.size >= 1 && loadedRoot;
+      const hasSel = selectedMeshes.size >= 1 && Boolean(loadedRoot);
+
       mergeLBtn.disabled = !hasSel;
       mergeRBtn.disabled = !hasSel;
       combineMeshLBtn.disabled = !hasSel;
@@ -1214,7 +1221,6 @@
       }
     }
 
-    // ローカル軸まわりのテスト回転処理
     function applyTestRotation() {
       if (!activeTestTarget) return;
       const deg = parseFloat(testRotSlider.value);
@@ -1249,7 +1255,7 @@
       return name;
     }
 
-    // ① グループ化処理（複数メッシュを階層グループへまとめる）
+    // ① グループ化処理
     function executeGroupMerge(prefix) {
       if (selectedMeshes.size === 0 || !loadedRoot) return;
 
@@ -1299,7 +1305,7 @@
       showToast(`グループ「${groupName}」を作成しました (${meshesToGroup.length}個)`);
     }
 
-    // ② 新機能：複数のメッシュを1つの単一メッシュ（BufferGeometry統合）に結合する処理
+    // ② 1メッシュ結合処理
     function executeCombineIntoSingleMesh(prefix) {
       if (selectedMeshes.size === 0 || !loadedRoot) return;
 
@@ -1311,7 +1317,6 @@
         ? pivotAnchor.quaternion.clone()
         : new THREE.Quaternion();
 
-      // 選択中のハイライト・既存グループ赤色ハイライトを一時解除して元のマテリアル・クリーンなジオメトリを取得
       clearAllSelections();
       meshesToCombine.forEach(m => {
         if (groupedMeshes.has(m)) {
@@ -1324,7 +1329,6 @@
         }
       });
 
-      // 新しく作成する単一メッシュの目標ワールド行列（ピボット座標 ＋ 軸姿勢）
       const targetWorldMat = new THREE.Matrix4().compose(
         pivotWorldPos,
         pivotWorldQuat,
@@ -1335,14 +1339,10 @@
       const normalizedGeos = [];
       const combinedMaterials = [];
 
-      // 結合する全ジオメトリの属性（position, normal, uv）を揃えて新ローカル空間へ変換
       meshesToCombine.forEach(mesh => {
         mesh.updateWorldMatrix(true, false);
-
-        // 元のメッシュから新メッシュのローカル座標系への変換行列
         const toNewLocalMat = new THREE.Matrix4().multiplyMatrices(targetWorldInv, mesh.matrixWorld);
 
-        // インデックス付きジオメトリは非インデックス化して頂点属性構成を統一
         let geo = mesh.geometry.clone();
         if (geo.index) {
           geo = geo.toNonIndexed();
@@ -1353,14 +1353,12 @@
           geo.computeVertexNormals();
         }
 
-        // UVが無いメッシュが混在する場合、結合エラーを防ぐためダミーUVを補完
         const posCount = geo.attributes.position.count;
         if (!geo.attributes.uv) {
           const dummyUv = new Float32Array(posCount * 2);
           geo.setAttribute('uv', new THREE.BufferAttribute(dummyUv, 2));
         }
 
-        // position, normal, uv 以外の余分な属性（tangent, color等）があるとmergeGeometriesが失敗するため整理
         const allowedAttrs = ['position', 'normal', 'uv'];
         for (const attrName of Object.keys(geo.attributes)) {
           if (!allowedAttrs.includes(attrName)) {
@@ -1368,7 +1366,6 @@
           }
         }
 
-        // マテリアルグループ情報の整理
         const meshMaterials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
         if (geo.groups && geo.groups.length > 0 && Array.isArray(mesh.material)) {
           geo.groups.forEach(g => {
@@ -1394,12 +1391,11 @@
         normalizedGeos.push(geo);
       });
 
-      // ジオメトリを1つにマージ（useGroups = true で複数マテリアル維持）
       const mergedGeometry = BufferGeometryUtils.mergeGeometries(normalizedGeos, true);
       normalizedGeos.forEach(g => g.dispose());
 
       if (!mergedGeometry) {
-        alert('ジオメトリの結合に失敗しました。メッシュの頂点データを確認してください。');
+        alert('ジオメトリの結合に失敗しました。');
         return;
       }
 
@@ -1411,7 +1407,6 @@
       const mergedMesh = new THREE.Mesh(mergedGeometry, finalMaterial);
       mergedMesh.name = mergedName;
 
-      // loadedRoot に追加し、ピボット位置・姿勢をローカル変換へ設定
       loadedRoot.add(mergedMesh);
       loadedRoot.updateMatrixWorld(true);
       const rootInvMat = loadedRoot.matrixWorld.clone().invert();
@@ -1419,7 +1414,6 @@
       localMat.decompose(mergedMesh.position, mergedMesh.quaternion, mergedMesh.scale);
       mergedMesh.updateMatrixWorld(true);
 
-      // 元の個別メッシュをシーンと選択可能リストから削除
       meshesToCombine.forEach(oldMesh => {
         if (oldMesh.parent) {
           oldMesh.parent.remove(oldMesh);
@@ -1431,7 +1425,6 @@
         oldMesh.geometry.dispose();
       });
 
-      // 新しい単一メッシュを選択可能リスト＆完了済み赤色表示に登録
       selectableMeshes.push(mergedMesh);
       groupedMeshes.add(mergedMesh);
       applyGroupedRedHighlight(mergedMesh);
