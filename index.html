@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>GLB 履帯グループ化 ＆ 1メッシュ結合ツール（色・マテリアル保持対応）</title>
+  <title>GLB 履帯グループ化 ＆ 1メッシュ結合ツール（オートセーブ・アンドゥ対応）</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
@@ -96,7 +96,6 @@
       min-height: 0;
     }
 
-    /* 左サイドバー */
     aside {
       width: 390px;
       background: #171a21;
@@ -407,12 +406,13 @@
 </head>
 <body>
   <header>
-    <h1>GLB 履帯グループ化 ＆ 1メッシュ結合ツール（色保持対応）</h1>
+    <h1>GLB 履帯グループ化 ＆ 1メッシュ結合ツール</h1>
     <div class="toolbar">
       <label class="file-label">
         GLBファイルを選択
         <input type="file" id="fileInput" accept=".glb,.gltf" />
       </label>
+      <button id="undoBtn" disabled title="直前の操作を1つ巻き戻します">↩ 1つ戻る</button>
       <button id="clearSelectionBtn" disabled>選択解除</button>
       <button id="exportBtn" class="success" disabled>編集済みGLBを出力</button>
     </div>
@@ -563,6 +563,7 @@
     const combineMeshLBtn = document.getElementById('combineMeshLBtn');
     const combineMeshRBtn = document.getElementById('combineMeshRBtn');
     const clearSelectionBtn = document.getElementById('clearSelectionBtn');
+    const undoBtn = document.getElementById('undoBtn');
     const exportBtn = document.getElementById('exportBtn');
     const toastEl = document.getElementById('toast');
 
@@ -662,6 +663,9 @@
     const groupedOverlays = new Map();
     const createdItems = [];
 
+    // アンドゥ（1つ戻る）用履歴スタック
+    const undoStack = [];
+
     let lCounter = 1;
     let rCounter = 1;
 
@@ -682,6 +686,96 @@
       clearTimeout(showToast._timer);
       showToast._timer = setTimeout(() => toastEl.classList.remove('show'), 2600);
     }
+
+    // 状態のスナップショットを保存（アンドゥ用 ＆ オートセーブ用）
+    function pushUndoState() {
+      if (!loadedRoot) return;
+      const exporter = new GLTFExporter();
+      exporter.parse(loadedRoot, (glbuf) => {
+        const stateObj = {
+          buffer: glbuf,
+          lCounter,
+          rCounter,
+          createdItemsMeta: createdItems.map(item => ({ type: item.type, name: item.object.name }))
+        };
+        undoStack.push(stateObj);
+        if (undoStack.length > 15) undoStack.shift(); // 最大15世代保持
+        undoBtn.disabled = false;
+        saveAutoSaveStorage(glbuf);
+      }, () => {}, { binary: true });
+    }
+
+    // ローカルストレージへオートセーブ
+    function saveAutoSaveStorage(glbuf) {
+      try {
+        const bytes = new Uint8Array(glbuf);
+        let binary = '';
+        for (let i = 0; i < bytes.byteLength; i++) {
+          binary += String.fromCharCode(bytes[i]);
+        }
+        const base64 = btoa(binary);
+        const data = {
+          filename: loadedFileName,
+          lCounter,
+          rCounter,
+          modelBase64: base64
+        };
+        localStorage.setItem('glb_tool_autosave', JSON.stringify(data));
+      } catch (e) {
+        console.warn('オートセーブに失敗しました（容量制限など）', e);
+      }
+    }
+
+    // 「1つ戻る」実行
+    undoBtn.addEventListener('click', () => {
+      if (undoStack.length === 0 || !loadedRoot) return;
+      resetActiveTestRotation();
+      clearAllSelections();
+
+      const prevState = undoStack.pop();
+      undoBtn.disabled = undoStack.length === 0;
+
+      const loader = new GLTFLoader();
+      loader.parse(prevState.buffer, '', (gltf) => {
+        scene.remove(loadedRoot);
+        selectableMeshes.length = 0;
+        groupedMeshes.clear();
+        createdItems.length = 0;
+        originalMaterials.clear();
+        highlightOverlays.clear();
+        groupedOverlays.clear();
+        activeTestTarget = null;
+        testBar.style.display = 'none';
+
+        loadedRoot = gltf.scene;
+        scene.add(loadedRoot);
+        loadedRoot.updateMatrixWorld(true);
+
+        lCounter = prevState.lCounter;
+        rCounter = prevState.rCounter;
+
+        loadedRoot.traverse((obj) => {
+          if (obj.isMesh) {
+            if (!obj.name) obj.name = `Mesh_${obj.id}`;
+            selectableMeshes.push(obj);
+
+            // メタデータに基づいて、過去に作成済みだったグループ/結合メッシュを赤色表示に復元
+            const matchedMeta = prevState.createdItemsMeta.find(m => m.name === obj.name);
+            if (matchedMeta) {
+              groupedMeshes.add(obj);
+              applyGroupedRedHighlight(obj);
+              createdItems.push({ type: matchedMeta.type, object: obj });
+            }
+          }
+        });
+
+        updateUI();
+        showToast('直前の操作を1つ戻しました (Undo)');
+      }, (err) => {
+        console.error(err);
+        alert('状態の復元に失敗しました');
+      });
+    });
 
     function setGizmoMode(mode) {
       gizmoMode = mode;
@@ -894,6 +988,7 @@
     applyMeshPivotOnlyBtn.addEventListener('click', () => {
       if (selectedMeshes.size === 0) return;
       resetActiveTestRotation();
+      pushUndoState();
 
       const targetPos = pivotAnchor.position.clone();
       const targetQuat = preserveOrientationChk.checked
@@ -916,11 +1011,9 @@
       showToast(`「${firstMesh.name}」のローカル軸で回転テストします`);
     });
 
-    // 青色ハイライト（元のマテリアルを正しく保持）
     function applyHighlight(mesh) {
       if (highlightOverlays.has(mesh.uuid)) return;
 
-      // 既に一時退避されていなければ、現在のマテリアル（結合後のマテリアル配列含む）を保存
       if (!originalMaterials.has(mesh.uuid)) {
         originalMaterials.set(mesh.uuid, mesh.material);
       }
@@ -979,7 +1072,6 @@
       }
     }
 
-    // 赤色ハイライト
     function applyGroupedRedHighlight(mesh) {
       if (groupedOverlays.has(mesh.uuid)) return;
 
@@ -1232,10 +1324,13 @@
       return name;
     }
 
+    // ① グループ化処理
     function executeGroupMerge(prefix) {
       if (selectedMeshes.size === 0 || !loadedRoot) return;
 
       resetActiveTestRotation();
+      pushUndoState();
+
       const groupName = getNextName(prefix);
 
       const pivotWorldPos = pivotAnchor.position.clone();
@@ -1278,14 +1373,16 @@
       createdItems.push({ type: 'group', object: newGroup });
       groupNameInput.value = '';
       updateUI();
+      pushUndoState(); // 保存用
       showToast(`グループ「${groupName}」を作成しました (${meshesToGroup.length}個)`);
     }
 
-    // 1メッシュ結合処理（マテリアル・色を完璧に保持する修正版）
+    // ② 1メッシュ結合処理
     function executeCombineIntoSingleMesh(prefix) {
       if (selectedMeshes.size === 0 || !loadedRoot) return;
 
       resetActiveTestRotation();
+      pushUndoState();
 
       const meshesToCombine = Array.from(selectedMeshes);
       const pivotWorldPos = pivotAnchor.position.clone();
@@ -1293,7 +1390,6 @@
         ? pivotAnchor.quaternion.clone()
         : new THREE.Quaternion();
 
-      // 一旦ハイライトを解除し、各メッシュの元のマテリアルを確実に取り出す
       clearAllSelections();
       meshesToCombine.forEach(m => {
         if (groupedMeshes.has(m)) {
@@ -1343,7 +1439,6 @@
           }
         }
 
-        // 元のメッシュのマテリアル（単体または配列）を取得して統合マテリアルリストに登録
         const meshMaterials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
         
         if (geo.groups && geo.groups.length > 0) {
@@ -1382,13 +1477,10 @@
       mergedGeometry.computeBoundingSphere();
 
       const mergedName = getNextName(prefix);
-      
-      // 統合されたマテリアル配列（または単一マテリアル）を設定
       const finalMaterial = combinedMaterials.length === 1 ? combinedMaterials[0] : combinedMaterials;
       const mergedMesh = new THREE.Mesh(mergedGeometry, finalMaterial);
       mergedMesh.name = mergedName;
 
-      // 結合メッシュ自体の元マテリアルとしても登録（赤色ハイライト・解除時に色を正しく復元するため）
       originalMaterials.set(mergedMesh.uuid, mergedMesh.material);
 
       loadedRoot.add(mergedMesh);
@@ -1416,7 +1508,8 @@
       createdItems.push({ type: 'mergedMesh', object: mergedMesh });
       groupNameInput.value = '';
       updateUI();
-      showToast(`「${mergedName}」として ${meshesToCombine.length} 個を1メッシュに結合しました（色保持）`);
+      pushUndoState();
+      showToast(`「${mergedName}」として ${meshesToCombine.length} 個を1メッシュに結合しました`);
     }
 
     mergeLBtn.addEventListener('click', () => executeGroupMerge('L'));
@@ -1425,15 +1518,9 @@
     combineMeshRBtn.addEventListener('click', () => executeCombineIntoSingleMesh('R'));
     clearSelectionBtn.addEventListener('click', clearAllSelections);
 
-    fileInput.addEventListener('change', (e) => {
-      const file = e.target.files[0];
-      if (!file) return;
-
-      loadedFileName = file.name.replace(/\.(glb|gltf)$/i, '');
-      const url = URL.createObjectURL(file);
+    function loadGlbFromBuffer(arrayBuffer, fileName) {
       const loader = new GLTFLoader();
-
-      loader.load(url, (gltf) => {
+      loader.parse(arrayBuffer, '', (gltf) => {
         clearAllSelections();
         if (loadedRoot) {
           scene.remove(loadedRoot);
@@ -1444,6 +1531,8 @@
         originalMaterials.clear();
         highlightOverlays.clear();
         groupedOverlays.clear();
+        undoStack.length = 0;
+        undoBtn.disabled = true;
         lCounter = 1;
         rCounter = 1;
         activeTestTarget = null;
@@ -1480,12 +1569,48 @@
 
         exportBtn.disabled = false;
         updateUI();
-        showToast(`「${file.name}」を読み込みました（メッシュ数: ${selectableMeshes.length}）`);
-        URL.revokeObjectURL(url);
-      }, undefined, (err) => {
+        showToast(`「${fileName}」を読み込みました（メッシュ数: ${selectableMeshes.length}）`);
+      }, (err) => {
         console.error(err);
         alert('GLBファイルの読み込みに失敗しました。');
       });
+    }
+
+    fileInput.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      loadedFileName = file.name.replace(/\.(glb|gltf)$/i, '');
+      const reader = new FileReader();
+      reader.onload = (evt) => {
+        loadGlbFromBuffer(evt.target.result, file.name);
+      };
+      reader.readAsArrayBuffer(file);
+    });
+
+    // 起動時にオートセーブデータがあるかチェック
+    window.addEventListener('DOMContentLoaded', () => {
+      const saved = localStorage.getItem('glb_tool_autosave');
+      if (saved) {
+        try {
+          const data = JSON.parse(saved);
+          if (confirm(`前回作業していたモデル「${data.filename}」のオートセーブデータが見つかりました。復元しますか？`)) {
+            loadedFileName = data.filename;
+            lCounter = data.lCounter || 1;
+            rCounter = data.rCounter || 1;
+
+            const binary = atob(data.modelBase64);
+            const len = binary.length;
+            const bytes = new Uint8Array(len);
+            for (let i = 0; i < len; i++) {
+              bytes[i] = binary.charCodeAt(i);
+            }
+            loadGlbFromBuffer(bytes.buffer, data.filename + '.glb');
+          }
+        } catch (e) {
+          console.warn('オートセーブデータの復元に失敗しました', e);
+        }
+      }
     });
 
     exportBtn.addEventListener('click', () => {
